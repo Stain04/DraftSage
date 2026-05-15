@@ -58,7 +58,7 @@ def validate_role(role: str) -> str:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.post("/suggest", response_model=SuggestResponse)
+@router.post("/suggest")
 async def suggest_champions(body: SuggestRequest):
     """
     Core AI endpoint — returns top 3 champion pick/ban recommendations
