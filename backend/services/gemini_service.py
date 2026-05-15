@@ -7,7 +7,7 @@ import json
 import os
 from groq import AsyncGroq
 from services.champion_types import analyze_team_damage
-from services.lolalytics_service import fetch_all_enemy_counters, build_lolalytics_context
+from services.lolalytics_service import fetch_all_context, build_lolalytics_context
 
 client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
 
@@ -132,14 +132,14 @@ IMPORTANT: Do NOT recommend any champion not in the pool above."""
     # ── Pre-compute damage balance (deterministic, not AI-guessed) ────────────
     dmg = analyze_team_damage(ally_picks)
 
-    # ── Fetch live lolalytics counter data (parallel, cached) ────────────────
+    # ── Fetch live lolalytics data: counter matchups + role tier list (parallel, no cache) ────
     lolalytics_block = ""
     if not ban_mode and enemy_picks:
         try:
-            enemy_data = await fetch_all_enemy_counters(enemy_picks, role)
-            lolalytics_block = build_lolalytics_context(enemy_data, role)
+            enemy_data, tier_list = await fetch_all_context(enemy_picks, role)
+            lolalytics_block = build_lolalytics_context(enemy_data, tier_list, role)
         except Exception:
-            lolalytics_block = ""  # Graceful fallback if fetch fails
+            lolalytics_block = ""  # Graceful fallback
 
     if ban_mode:
         user_message = f"""Current draft state — recommend the 3 best BANS.
@@ -200,7 +200,7 @@ Return ONLY valid JSON, no extra text."""
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": user_message},
         ],
-        temperature=0.3,
+        temperature=0.72,   # Higher temp = more diverse, creative picks
         max_tokens=2500,
     )
 
