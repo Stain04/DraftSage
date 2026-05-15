@@ -27,7 +27,7 @@ API_KEYS = _load_api_keys()
 
 MODELS = [
     "llama-3.3-70b-versatile",  # Best quality
-    "llama-3.1-70b-versatile",  # Fallback model
+    "llama3-70b-8192",          # Fallback (stable, high quality)
     "llama-3.1-8b-instant",     # Last resort — very high rate limits
 ]
 
@@ -250,9 +250,10 @@ Return ONLY valid JSON, no extra text."""
                 break  # Success — exit model loop
             except Exception as e:
                 last_error = e
-                if "rate_limit_exceeded" in str(e) or "429" in str(e):
-                    continue  # Try next model / key
-                raise  # Non-rate-limit error — surface immediately
+                err = str(e)
+                if any(x in err for x in ("rate_limit_exceeded", "429", "model_decommissioned", "model_not_found")):
+                    continue  # Skip to next model / key
+                raise  # Any other error — surface immediately
         if raw_text is not None:
             break  # Success — exit key loop
 
