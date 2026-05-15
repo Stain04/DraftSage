@@ -6,6 +6,7 @@ Challenger-level League of Legends draft recommendations with 6-layer analysis.
 import json
 import os
 from groq import AsyncGroq
+from services.champion_types import analyze_team_damage
 
 client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
 
@@ -127,6 +128,9 @@ MY CHAMPION POOL (ONLY recommend champions from this list):
 {chr(10).join(f"  - {c}" for c in champion_pool)}
 IMPORTANT: Do NOT recommend any champion not in the pool above."""
 
+    # ── Pre-compute damage balance (deterministic, not AI-guessed) ────────────
+    dmg = analyze_team_damage(ally_picks)
+
     if ban_mode:
         user_message = f"""Current draft state — recommend the 3 best BANS.
 
@@ -146,9 +150,12 @@ Prioritize banning:
 
 Think through all 6 layers then return ONLY valid JSON."""
     else:
-        user_message = f"""Current draft state — recommend the top 3 picks for {role}.
+        user_message = f"""{dmg['hard_rule']}
 
-ALLY TEAM:
+═══════════════════════════════════════════════════════
+Current draft state — recommend the top 3 picks for {role}.
+
+ALLY TEAM (damage type: {dmg['label']} — {dmg['ap_count']} AP / {dmg['ad_count']} AD):
 {ally_str}
 
 ENEMY TEAM:
@@ -156,21 +163,23 @@ ENEMY TEAM:
 
 WHAT I NEED:
 - Role to fill: {role}
-- Patch context: latest competitive meta{pool_section}
+- Ally damage profile: {dmg['label']} ({dmg['ap_count']} AP / {dmg['ad_count']} AD)
+- Required damage type for next pick: {dmg['required_type']}
+- FORBIDDEN damage type: {dmg['forbidden_type']}{pool_section}
 
 IMPORTANT CONTEXT:
 - This is a high-elo game. Assume optimal play from both sides.
+- The MANDATORY DAMAGE RULE above overrides everything else.
 - Prioritize win condition synergy over raw stats.
-- Consider laning phase survival AND late-game impact.
-- Reference enemy and ally champions BY NAME in your reasoning — no generic analysis.
+- Reference enemy and ally champions BY NAME in your reasoning.
 
 Think through all 6 layers IN ORDER:
 1. Identify both teams' win conditions.
-2. Check damage type balance — if ally is full-AD, ONLY suggest AP. If full-AP, ONLY suggest AD.
-3. Identify the biggest enemy threat and find a pick that counters or minimizes it.
+2. ⚠️ Damage balance is {dmg['label']}. Required: {dmg['required_type']}. DO NOT suggest {dmg['forbidden_type']} champions.
+3. Identify the biggest enemy threat and the pick that counters it.
 4. Find synergies with existing ally picks.
 5. Confirm meta viability.
-6. Assess difficulty vs payoff, power spike timing, and summoner spells.
+6. Assess difficulty, power spike timing, and summoner spells.
 
 Return ONLY valid JSON, no extra text."""
 
