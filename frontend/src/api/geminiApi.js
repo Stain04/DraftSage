@@ -1,6 +1,9 @@
 import axios from "axios";
 
-const BASE_URL = (process.env.REACT_APP_API_URL || "http://localhost:8000").trim();
+// Strip any non-printable chars (BOM, CR, LF, etc.) that corrupt Axios URL validation
+const BASE_URL = (process.env.REACT_APP_API_URL || "https://draftsage-production.up.railway.app")
+  .replace(/[^\x20-\x7E]/g, "")
+  .trim();
 
 const api = axios.create({ baseURL: BASE_URL });
 
