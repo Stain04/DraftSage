@@ -205,17 +205,37 @@ Think through all 6 layers IN ORDER:
 
 Return ONLY valid JSON, no extra text."""
 
-    response = await client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": user_message},
-        ],
-        temperature=0.72,   # Higher temp = more diverse, creative picks
-        max_tokens=2500,
-    )
+    # Model fallback chain — if primary hits rate limit, auto-switch to next
+    MODELS = [
+        "llama-3.3-70b-versatile",  # Best quality
+        "llama-3.1-70b-versatile",  # Fallback 1 (separate quota)
+        "llama-3.1-8b-instant",     # Fallback 2 (very high limit)
+    ]
 
-    raw_text = response.choices[0].message.content.strip()
+    raw_text = None
+    last_error = None
+
+    for model in MODELS:
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user",   "content": user_message},
+                ],
+                temperature=0.72,
+                max_tokens=1400,  # Reduced from 2500 — saves ~43% tokens per request
+            )
+            raw_text = response.choices[0].message.content.strip()
+            break  # Success — stop trying fallbacks
+        except Exception as e:
+            last_error = e
+            if "rate_limit_exceeded" in str(e) or "429" in str(e):
+                continue  # Try next model
+            raise  # Non-rate-limit error — surface immediately
+
+    if raw_text is None:
+        raise last_error  # All models exhausted
 
     # Strip markdown code fences if present
     if raw_text.startswith("```"):
@@ -225,3 +245,4 @@ Return ONLY valid JSON, no extra text."""
         raw_text = raw_text.strip()
 
     return json.loads(raw_text)
+
