@@ -17,3 +17,5 @@ test_auth.py
 # OS
 .DS_Store
 Thumbs.db
+
+.vercel
