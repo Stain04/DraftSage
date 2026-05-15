@@ -1,24 +1,39 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import api from "../api/geminiApi";
 
-const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || "";
-const SUPABASE_KEY = process.env.REACT_APP_SUPABASE_KEY || "";
+// Sanitize env vars — strip BOM, zero-width chars, and any non-printable ASCII
+// that can silently corrupt fetch/Axios URLs and cause "Invalid non-printable ASCII" errors.
+const clean = (s) =>
+  (s || "")
+    .replace(/[\uFEFF\u200B-\u200D\u2060\u00AD]/g, "") // BOM + zero-width chars
+    .replace(/[^\x20-\x7E]/g, "")                       // anything outside printable ASCII
+    .trim();
 
-export const supabase = SUPABASE_URL
-  ? createClient(SUPABASE_URL, SUPABASE_KEY)
-  : null;
+const SUPABASE_URL = clean(process.env.REACT_APP_SUPABASE_URL);
+const SUPABASE_KEY = clean(process.env.REACT_APP_SUPABASE_KEY);
+
+if (process.env.NODE_ENV !== "production") {
+  // eslint-disable-next-line no-console
+  console.info("[AuthContext] Supabase URL:", SUPABASE_URL);
+  // eslint-disable-next-line no-console
+  console.info("[AuthContext] Supabase KEY length:", SUPABASE_KEY.length);
+}
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  throw new Error(
+    "[AuthContext] Missing Supabase credentials. Check REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_KEY in your .env file."
+  );
+}
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser]     = useState(null);
+  const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!supabase) { setLoading(false); return; }
-
-    // Restore session — Supabase persists it in localStorage automatically
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         setUser(session.user);
@@ -41,39 +56,41 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signUp = async (email, password, summonerName) => {
-    const { data } = await api.post("/api/auth/register", {
-      email, password, summoner_name: summonerName,
+    // Sanitize inputs to prevent any stray hidden chars from leaking into the request
+    const cleanEmail    = clean(email);
+    const cleanSummoner = clean(summonerName);
+    const { data, error } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password,
+      options: { data: { summoner_name: cleanSummoner, is_pro: false, is_admin: false } },
     });
+    if (error) throw error;
+    if (data.user) {
+      await supabase.from("profiles").upsert({
+        id: data.user.id,
+        summoner_name: cleanSummoner || null,
+        is_pro: false,
+        is_admin: false,
+      });
+    }
     return data;
   };
 
   const signIn = async (email, password) => {
-    const { data } = await api.post("/api/auth/login", { email, password });
-    localStorage.setItem("draftsage_token", data.access_token);
-
-    if (supabase) {
-      // Hand the real Supabase session to the client so auth.uid() works
-      await supabase.auth.setSession({
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-      });
-      // onAuthStateChange fires above and calls setUser with the full user object
-    } else {
-      // Fallback: no Supabase client — use what the backend returned
-      setUser(data.user);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    if (data.session) {
+      localStorage.setItem("draftsage_token", data.session.access_token);
     }
     return data;
   };
 
   const signOut = async () => {
-    if (supabase) await supabase.auth.signOut();
-    await api.post("/api/auth/logout").catch(() => {});
+    await supabase.auth.signOut();
     localStorage.removeItem("draftsage_token");
     setUser(null);
   };
 
-  // Read admin/pro flags directly from user_metadata (stored in the JWT)
-  // This works whether via Supabase client session or backend login response
   const isAdmin = user?.user_metadata?.is_admin === true;
   const isPro   = user?.user_metadata?.is_pro   === true || isAdmin;
 
