@@ -9,7 +9,27 @@ from groq import AsyncGroq
 from services.champion_types import analyze_team_damage
 from services.lolalytics_service import fetch_all_context, build_lolalytics_context
 
-client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+# ── API Key Rotation Pool ─────────────────────────────────────────────────────
+# Add keys as GROQ_API_KEY, GROQ_API_KEY_2, GROQ_API_KEY_3 ... in Railway/Vercel env vars.
+# On rate limit, the system automatically tries the next key.
+def _load_api_keys() -> list[str]:
+    keys = []
+    # Primary key
+    if k := os.getenv("GROQ_API_KEY"):
+        keys.append(k)
+    # Additional keys: GROQ_API_KEY_2, GROQ_API_KEY_3, ... GROQ_API_KEY_10
+    for i in range(2, 11):
+        if k := os.getenv(f"GROQ_API_KEY_{i}"):
+            keys.append(k)
+    return keys
+
+API_KEYS = _load_api_keys()
+
+MODELS = [
+    "llama-3.3-70b-versatile",  # Best quality
+    "llama-3.1-70b-versatile",  # Fallback model
+    "llama-3.1-8b-instant",     # Last resort — very high rate limits
+]
 
 SYSTEM_PROMPT = """You are a Challenger-level League of Legends draft analyst with deep knowledge of high-elo gameplay, meta trends, and competitive drafting.
 
@@ -205,37 +225,39 @@ Think through all 6 layers IN ORDER:
 
 Return ONLY valid JSON, no extra text."""
 
-    # Model fallback chain — if primary hits rate limit, auto-switch to next
-    MODELS = [
-        "llama-3.3-70b-versatile",  # Best quality
-        "llama-3.1-70b-versatile",  # Fallback 1 (separate quota)
-        "llama-3.1-8b-instant",     # Fallback 2 (very high limit)
-    ]
+    # Try every combination of API key × model until one succeeds
+    # With 3 keys and 3 models = 9 attempts before giving up
+    if not API_KEYS:
+        raise RuntimeError("No GROQ_API_KEY found. Set at least one API key in environment variables.")
 
-    raw_text = None
+    raw_text  = None
     last_error = None
 
-    for model in MODELS:
-        try:
-            response = await client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user",   "content": user_message},
-                ],
-                temperature=0.72,
-                max_tokens=1400,  # Reduced from 2500 — saves ~43% tokens per request
-            )
-            raw_text = response.choices[0].message.content.strip()
-            break  # Success — stop trying fallbacks
-        except Exception as e:
-            last_error = e
-            if "rate_limit_exceeded" in str(e) or "429" in str(e):
-                continue  # Try next model
-            raise  # Non-rate-limit error — surface immediately
+    for api_key in API_KEYS:
+        for model in MODELS:
+            try:
+                client = AsyncGroq(api_key=api_key)
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user",   "content": user_message},
+                    ],
+                    temperature=0.72,
+                    max_tokens=1400,
+                )
+                raw_text = response.choices[0].message.content.strip()
+                break  # Success — exit model loop
+            except Exception as e:
+                last_error = e
+                if "rate_limit_exceeded" in str(e) or "429" in str(e):
+                    continue  # Try next model / key
+                raise  # Non-rate-limit error — surface immediately
+        if raw_text is not None:
+            break  # Success — exit key loop
 
     if raw_text is None:
-        raise last_error  # All models exhausted
+        raise last_error  # All keys + models exhausted
 
     # Strip markdown code fences if present
     if raw_text.startswith("```"):
@@ -245,4 +267,5 @@ Return ONLY valid JSON, no extra text."""
         raw_text = raw_text.strip()
 
     return json.loads(raw_text)
+
 
