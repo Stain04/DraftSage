@@ -36,7 +36,7 @@ function incrementUsage() {
 }
 
 export default function DraftBoard() {
-  const { user, isPro, isAdmin } = useAuth();
+  const { isPro, isAdmin } = useAuth();
   const [champions, setChampions] = useState([]);
   // Each ally slot: { champion: obj|null, role: string }
   const [allyPicks, setAllyPicks]   = useState(
