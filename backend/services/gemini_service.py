@@ -312,21 +312,28 @@ Return ONLY valid JSON, no extra text."""
         if filtered:
             result["recommendations"] = filtered
 
-    # ── Patch tier badges — computed from tier list position ──────────────────
-    # S = top 3, A = 4-8, B = 9-14, C = 15+, not listed = B
+    # ── Patch tier badges — from OP.GG Tier 1/2/3 data ───────────────────────
+    # tier_list_ref is now list[dict] with real tier numbers: 1=S, 2=A, 3=B
     if tier_list_ref and result.get("recommendations"):
-        tier_map = {name.lower(): i for i, name in enumerate(tier_list_ref)}
-        for rec in result["recommendations"]:
-            pos = tier_map.get(rec.get("champion", "").lower())
-            if pos is None:
-                rec["patch_tier"] = "B"
-            elif pos < 3:
-                rec["patch_tier"] = "S"
-            elif pos < 8:
-                rec["patch_tier"] = "A"
-            elif pos < 14:
-                rec["patch_tier"] = "B"
-            else:
-                rec["patch_tier"] = "C"
+        from .opgg_service import build_tier_lookup
+        tier_lookup = build_tier_lookup(tier_list_ref) if isinstance(tier_list_ref[0], dict) else {}
+
+        # Fallback: position-based if OP.GG returned old list[str] format
+        if not tier_lookup and isinstance(tier_list_ref[0], str):
+            pos_map = {name.lower(): i for i, name in enumerate(tier_list_ref)}
+            for rec in result["recommendations"]:
+                pos = pos_map.get(rec.get("champion", "").lower())
+                rec["patch_tier"] = "S" if pos is not None and pos < 3 else \
+                                    "A" if pos is not None and pos < 8 else \
+                                    "B" if pos is not None and pos < 14 else "C"
+        else:
+            for rec in result["recommendations"]:
+                entry = tier_lookup.get(rec.get("champion", "").lower())
+                if entry is None:
+                    rec["patch_tier"] = "B"   # Not in OP.GG tier list for this role
+                else:
+                    rec["patch_tier"] = entry["tier_label"]  # "S", "A", or "B"
+
+
 
     return result

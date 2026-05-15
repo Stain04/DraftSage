@@ -195,25 +195,29 @@ async def fetch_role_tier_list(role: str) -> list[str]:
     return _parse_tier_list(text)
 
 
-async def fetch_all_context(enemy_picks: list[str], role: str) -> tuple[list[dict], list[str]]:
+async def fetch_all_context(enemy_picks: list[str], role: str) -> tuple[list[dict], list[dict]]:
     """
-    Fetch counter data for all enemy picks (each in their OWN role) + the role tier list, in parallel.
-    Using each champion's actual lane gives accurate matchup stats (Darius top ≠ Darius mid).
+    Fetch counter data for all enemy picks (each in their OWN role) + the role tier list.
+    - Counter data: lolalytics (bulk "who beats X" queries — works perfectly)
+    - Tier list: OP.GG MCP (authoritative Tier 1/2/3 numbers, not position guesses)
+    Returns: (enemy_counter_data, tier_list_dicts)
     """
+    from .opgg_service import fetch_lane_tier_list
+
     counter_tasks = []
     for pick in enemy_picks[:5]:
         champ_name = pick.split("(")[0].strip()
-        # Extract the enemy champion's own role from tag e.g. "Darius (Top)" → "Top"
         role_match = re.search(r'\((\w+)\)', pick)
         champ_role = role_match.group(1).capitalize() if role_match else role
         counter_tasks.append(fetch_champion_counters(champ_name, champ_role))
 
-    tier_task = fetch_role_tier_list(role)  # tier list is still for the role being filled
+    tier_task = fetch_lane_tier_list(role)
     results   = await asyncio.gather(*counter_tasks, tier_task, return_exceptions=True)
 
     tier_list  = results[-1] if isinstance(results[-1], list) else []
     enemy_data = [r for r in results[:-1] if isinstance(r, dict) and not r.get("error")]
     return enemy_data, tier_list
+
 
 
 def build_lolalytics_context(enemy_data: list[dict], tier_list: list[str], role: str, enemy_laner: str | None = None) -> str:
@@ -279,16 +283,33 @@ def build_lolalytics_context(enemy_data: list[dict], tier_list: list[str], role:
                 avoid_str = ", ".join(c["champion"] for c in avoided[:5])
                 lines.append(f"  ⚠ {champ} beats: {avoid_str} — avoid suggesting these")
 
-    # ── Role tier list ────────────────────────────────────────────────────────
+    # ── Role tier list (from OP.GG MCP — real Tier 1/2/3 numbers) ─────────────
     if tier_list:
-        top15 = tier_list[:15]
-        lines += [
-            "",
-            f"CURRENT PATCH {role.upper()} TIER LIST (strongest → weakest):",
-            f"  {' > '.join(top15)}",
-            "",
-            "Only recommend champions from this tier list unless there is a specific strong reason.",
-        ]
+        # tier_list is now list[dict] from OP.GG: {champion, tier, tier_label, rank, win_rate}
+        if isinstance(tier_list[0], dict):
+            s_tier = [e["champion"] for e in tier_list if e.get("tier") == 1][:6]
+            a_tier = [e["champion"] for e in tier_list if e.get("tier") == 2][:6]
+            b_tier = [e["champion"] for e in tier_list if e.get("tier") == 3][:4]
+            lines += [
+                "",
+                f"CURRENT PATCH {role.upper()} TIER LIST (OP.GG ranked):",
+                f"  S Tier (Tier 1): {', '.join(s_tier) or 'none'}",
+                f"  A Tier (Tier 2): {', '.join(a_tier) or 'none'}",
+                f"  B Tier (Tier 3): {', '.join(b_tier) or 'none'}",
+                "",
+                "Strongly prefer S and A tier picks when available.",
+            ]
+        else:
+            # Fallback: old list[str] format
+            top15 = tier_list[:15]
+            lines += [
+                "",
+                f"CURRENT PATCH {role.upper()} TIER LIST (strongest → weakest):",
+                f"  {' > '.join(top15)}",
+                "",
+                "Only recommend champions from this tier list unless there is a specific strong reason.",
+            ]
+
 
     # ── Playstyle diversity ───────────────────────────────────────────────────
     playstyles = ROLE_PLAYSTYLES.get(role, [])
