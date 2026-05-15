@@ -166,7 +166,7 @@ async def fetch_champion_counters(champion: str, role: str) -> dict:
 
     counters = sorted(
         [{"champion": opp, "wr_for_them": wr, "advantage": round(50 - wr, 1)}
-         for opp, wr in matchups.items() if wr <= 48.0],
+         for opp, wr in matchups.items() if wr <= 47.0],  # must be 3%+ genuine edge
         key=lambda x: x["wr_for_them"],
     )
     easy = sorted(

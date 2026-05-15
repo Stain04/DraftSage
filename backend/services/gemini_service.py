@@ -52,7 +52,16 @@ LAYER 6 - PRACTICAL CONSIDERATIONS
 
 STRICT RULES:
 - The 3 recommendations MUST be different champion archetypes. Never suggest the same class three times.
-- Never recommend a champion countered by an existing enemy pick.
+- NEVER recommend a champion that is already picked by either team. If a champion is on the ally or enemy team, it is banned from suggestions.
+- NEVER recommend a champion countered by an existing enemy pick.
+- NEVER recommend a champion that is the same class/archetype as the enemy laner in the role being filled.
+  * If enemy mid is a Control Mage (Orianna, Azir, Viktor, Syndra, Cassiopeia, Lissandra), suggest assassins, divers, or poke champs — NOT other control mages.
+  * If enemy mid is an Assassin (Zed, Akali, Katarina, LeBlanc), suggest tanks, shields, or point-and-click CC — NOT other assassins.
+  * If enemy top is a Tank/Engage (Malphite, Ornn, Sion), suggest splitpushers or AP damage — NOT other tanks.
+  * If enemy top is a Juggernaut (Darius, Garen), suggest ranged champions or kite-heavy picks — NOT other juggernauts.
+  * If enemy jungle is a Tank (Amumu, Sejuani), suggest carry junglers or skirmishers — NOT other tanks.
+  Reason: a mirror matchup does NOT counter — it is a coin flip. Real counterpicks come from a different archetype.
+- A real counter has a statistical advantage of AT LEAST 3% win rate over 50/50. Do not treat a 51% win rate as a "counter" — that is noise.
 - Always reference the SPECIFIC enemy champions and ally champions by name in your reasoning — no generic analysis.
 - If a champion pool is provided, ONLY recommend champions from that pool.
 
@@ -141,6 +150,12 @@ IMPORTANT: Do NOT recommend any champion not in the pool above."""
         except Exception:
             lolalytics_block = ""  # Graceful fallback
 
+    # Build list of all champions already in the draft (cannot be suggested)
+    all_draft_picks = [
+        p.split("(")[0].strip() for p in ally_picks + enemy_picks if p
+    ]
+    excluded_str = ", ".join(all_draft_picks) if all_draft_picks else "None"
+
     if ban_mode:
         user_message = f"""Current draft state — recommend the 3 best BANS.
 
@@ -163,8 +178,12 @@ Think through all 6 layers then return ONLY valid JSON."""
         user_message = f"""{dmg['hard_rule']}
 {lolalytics_block}
 
-═══════════════════════════════════════════════════════
+{'='*55}
 Current draft state — recommend the top 3 picks for {role}.
+
+⛔ CANNOT SUGGEST THESE CHAMPIONS (already in draft — ally or enemy):
+   {excluded_str}
+   These are locked in. Suggesting any of them is an error.
 
 ALLY TEAM (damage type: {dmg['label']} — {dmg['ap_count']} AP / {dmg['ad_count']} AD):
 {ally_str}
@@ -178,18 +197,17 @@ WHAT I NEED:
 - Required damage type for next pick: {dmg['required_type']}
 - FORBIDDEN damage type: {dmg['forbidden_type']}{pool_section}
 
-IMPORTANT CONTEXT:
-- This is a high-elo game. Assume optimal play from both sides.
-- The MANDATORY DAMAGE RULE above overrides everything else.
-- Prioritize win condition synergy over raw stats.
+IMPORTANT:
+- The MANDATORY DAMAGE RULE and CANNOT SUGGEST list override everything else.
+- Do NOT suggest a champion that is the same archetype as the enemy {role} laner.
 - Reference enemy and ally champions BY NAME in your reasoning.
 
 Think through all 6 layers IN ORDER:
 1. Identify both teams' win conditions.
-2. ⚠️ Damage balance is {dmg['label']}. Required: {dmg['required_type']}. DO NOT suggest {dmg['forbidden_type']} champions.
-3. Identify the biggest enemy threat and the pick that counters it.
+2. Damage balance is {dmg['label']}. Required: {dmg['required_type']}. DO NOT suggest {dmg['forbidden_type']}.
+3. Identify the enemy {role} laner's archetype — suggest a DIFFERENT archetype that beats it.
 4. Find synergies with existing ally picks.
-5. Confirm meta viability.
+5. Confirm the pick is on the tier list and meta-viable.
 6. Assess difficulty, power spike timing, and summoner spells.
 
 Return ONLY valid JSON, no extra text."""
