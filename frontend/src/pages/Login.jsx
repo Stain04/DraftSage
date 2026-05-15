@@ -50,7 +50,7 @@ export default function Login() {
       }
       navigate(redirect);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Authentication failed.");
+      toast.error(err.message || err.response?.data?.detail || "Authentication failed.");
     } finally {
       setLoading(false);
     }

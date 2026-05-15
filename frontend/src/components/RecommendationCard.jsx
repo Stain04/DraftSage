@@ -31,14 +31,22 @@ const GRADE_CONFIG = {
   C: { bg: "bg-red-500/20",     text: "text-red-400",     border: "border-red-500/40",     label: "C" },
 };
 
+const TIER_CONFIG = {
+  S: { bg: "bg-gold/20",        text: "text-gold",        border: "border-gold/50",        label: "S Tier" },
+  A: { bg: "bg-emerald-500/20", text: "text-emerald-400", border: "border-emerald-500/40", label: "A Tier" },
+  B: { bg: "bg-blue-500/20",    text: "text-blue-400",    border: "border-blue-500/40",    label: "B Tier" },
+  C: { bg: "bg-red-500/20",     text: "text-red-400",     border: "border-red-500/40",     label: "C Tier" },
+};
+
 const CURVE_LABELS = { early: "Early game", mid: "Mid game", late: "Late game", scaling: "Scaling" };
 
 // ── RecommendationCard ────────────────────────────────────────────────────────
 
-export default function RecommendationCard({ rec, rank, isTopPick = false }) {
+export default function RecommendationCard({ rec, rank, isTopPick = false, banMode = false }) {
   const [expanded, setExpanded] = useState(false);
   const diff    = DIFFICULTY_CONFIG[rec.difficulty]    || DIFFICULTY_CONFIG.Medium;
   const dmg     = DAMAGE_TYPE_CONFIG[rec.damage_type]  || DAMAGE_TYPE_CONFIG.Mixed;
+  const tier    = TIER_CONFIG[rec.patch_tier]          || TIER_CONFIG.B;
   const iconUrl = getChampionIconUrl(rec.champion);
 
   return (
@@ -78,8 +86,14 @@ export default function RecommendationCard({ rec, rank, isTopPick = false }) {
               <span className={`w-1.5 h-1.5 rounded-full ${diff.dot}`} />
               {rec.difficulty || "Medium"}
             </span>
+            {/* Patch Tier */}
+            {rec.patch_tier && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border ${tier.bg} ${tier.text} ${tier.border}`}>
+                {tier.label}
+              </span>
+            )}
             {/* Damage type */}
-            {rec.damage_type && (
+            {rec.damage_type && !banMode && (
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${dmg.bg} ${dmg.text} ${dmg.border}`}>
                 {dmg.icon} {dmg.label}
               </span>

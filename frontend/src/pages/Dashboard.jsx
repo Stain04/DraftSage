@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
-import { Brain, History, Zap, User, LogOut, Trophy, Calendar, KeyRound, Eye, EyeOff, CheckCircle, X, ExternalLink } from "lucide-react";
+import { Brain, History, Zap, User, LogOut, Trophy, Calendar, KeyRound, Eye, EyeOff, CheckCircle, X, ExternalLink, Shield } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../context/AuthContext";
 import { toast } from "react-hot-toast";
@@ -16,6 +16,86 @@ function getDailyUsage() {
     return parsed;
   } catch { return { count: 0, date: new Date().toDateString() }; }
 }
+
+// ── Draft History Component ───────────────────────────────────────────────────
+const GRADE_COLORS = {
+  A: "text-emerald-400 bg-emerald-500/15 border-emerald-500/30",
+  B: "text-yellow-400 bg-yellow-500/15 border-yellow-500/30",
+  C: "text-red-400 bg-red-500/15 border-red-500/30",
+};
+
+function DraftHistoryList({ userId }) {
+  const [drafts, setDrafts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
+    supabase
+      .from("draft_history")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(10)
+      .then(({ data, error }) => {
+        if (!error && data) setDrafts(data);
+        setLoading(false);
+      });
+  }, [userId]);
+
+  if (loading) return (
+    <div className="space-y-2">
+      {[1,2,3].map(i => <div key={i} className="h-16 skeleton rounded-xl" />)}
+    </div>
+  );
+
+  if (drafts.length === 0) return (
+    <p className="text-sm text-navy-500 text-center py-6">
+      No drafts saved yet. Start analyzing your next draft!
+    </p>
+  );
+
+  return (
+    <div className="space-y-3">
+      {drafts.map((draft) => {
+        const grade = draft.result?.draft_grade;
+        const recs  = draft.result?.recommendations || [];
+        const date  = new Date(draft.created_at).toLocaleDateString("en-US", {
+          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+        });
+        return (
+          <div key={draft.id} className="rounded-xl border border-navy-700 bg-navy-800/40 p-3 flex items-center gap-3">
+            {/* Mode icon */}
+            <div className="w-8 h-8 rounded-lg bg-navy-800 border border-navy-600 flex items-center justify-center flex-shrink-0">
+              {draft.ban_mode
+                ? <Shield size={14} className="text-red-400" />
+                : <Brain size={14} className="text-gold" />
+              }
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-semibold text-white">{draft.role}</span>
+                {recs.slice(0, 3).map((r) => (
+                  <span key={r.champion} className="text-xs text-navy-300">{r.champion}</span>
+                ))}
+              </div>
+              <p className="text-xs text-navy-500 mt-0.5">{date}</p>
+            </div>
+
+            {/* Grade */}
+            {grade && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${GRADE_COLORS[grade] || GRADE_COLORS.B}`}>
+                {grade}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 
 export default function Dashboard() {
   const { user, signOut, loading, isPro } = useAuth();
@@ -204,7 +284,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Draft History Placeholder */}
+        {/* Draft History */}
         <div className="card rounded-2xl p-6 mt-4 animate-slide-up" style={{ animationDelay: "0.3s" }}>
           <div className="flex items-center gap-2 mb-4">
             <History size={16} className="text-navy-400" />
@@ -212,7 +292,7 @@ export default function Dashboard() {
             {!isPro && <span className="ml-auto text-xs text-gold border border-gold/30 px-2 py-0.5 rounded-full">Pro feature</span>}
           </div>
           {isPro ? (
-            <p className="text-sm text-navy-500 text-center py-6">No drafts saved yet. Start analyzing your next draft!</p>
+            <DraftHistoryList userId={user?.id} />
           ) : (
             <div className="text-center py-6">
               <History size={32} className="text-navy-700 mx-auto mb-3" />
@@ -221,6 +301,7 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+
 
         {/* Change Password */}
         <div className="card rounded-2xl p-6 mt-4 animate-slide-up" style={{ animationDelay: "0.4s" }}>

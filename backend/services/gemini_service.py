@@ -1,36 +1,30 @@
-"""
-Groq AI service for DraftSage draft analysis.
-Challenger-level League of Legends draft recommendations with 6-layer analysis.
-"""
-
 import json
 import os
+import asyncio
+import re
+from typing import Optional
+
 from groq import AsyncGroq
-from services.champion_types import analyze_team_damage
-from services.lolalytics_service import fetch_all_context, build_lolalytics_context
 
-# ── API Key Rotation Pool ─────────────────────────────────────────────────────
-# Add keys as GROQ_API_KEY, GROQ_API_KEY_2, GROQ_API_KEY_3 ... in Railway/Vercel env vars.
-# On rate limit, the system automatically tries the next key.
-def _load_api_keys() -> list[str]:
-    keys = []
-    # Primary key
-    if k := os.getenv("GROQ_API_KEY"):
-        keys.append(k)
-    # Additional keys: GROQ_API_KEY_2, GROQ_API_KEY_3, ... GROQ_API_KEY_10
-    for i in range(2, 11):
-        if k := os.getenv(f"GROQ_API_KEY_{i}"):
-            keys.append(k)
-    return keys
+from .lolalytics_service import fetch_all_context, build_lolalytics_context
+from .champion_types import analyze_team_damage
 
-API_KEYS = _load_api_keys()
+# ── API Keys (pool for rotation) ─────────────────────────────────────────────
+API_KEYS: list[str] = []
+for i in range(1, 11):
+    suffix = "" if i == 1 else f"_{i}"
+    key = os.environ.get(f"GROQ_API_KEY{suffix}", "").strip()
+    if key:
+        API_KEYS.append(key)
 
+# ── Model fallback chain ──────────────────────────────────────────────────────
 MODELS = [
     "llama-3.3-70b-versatile",  # Best quality
     "llama3-70b-8192",          # Fallback (stable, high quality)
     "llama-3.1-8b-instant",     # Last resort — very high rate limits
 ]
 
+# ── System prompt ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are a Challenger-level League of Legends draft analyst with deep knowledge of high-elo gameplay, meta trends, and competitive drafting.
 
 When analyzing a draft, think through these layers IN ORDER before producing output:
@@ -96,50 +90,47 @@ OUTPUT FORMAT — Return ONLY valid JSON, zero extra text:
   "recommendations": [
     {
       "champion": "ChampionName",
-      "reason": "2-3 sentences referencing the SPECIFIC enemy and ally champions by name, explaining counter-pick logic and comp fit",
-      "win_condition": "Exactly how this champion wins this specific game — reference the team composition",
-      "difficulty": "Easy" | "Medium" | "Hard",
-      "damage_type": "AD" | "AP" | "Mixed" | "True",
-      "fills_gap": "Short label: e.g. AP carry, Engage tank, Peel support, Splitpusher",
-      "power_spike": "When this champion becomes strong, e.g. Level 6, First item (Kraken Slayer), Level 11",
-      "synergies": ["AllyChamp1", "AllyChamp2"],
-      "counters": ["EnemyChamp1"],
+      "difficulty": "Easy|Medium|Hard",
+      "damage_type": "AD|AP|Mixed|True",
+      "archetype": "Mage|Assassin|Tank|Fighter|Marksman|Support|etc",
+      "analysis": "2-3 sentences: why this champion is the best pick for this specific draft",
+      "win_condition": "1-2 sentences: exactly how this champion wins the game given the current state",
+      "synergizes_with": ["AllyName1", "AllyName2"],
+      "counters": ["EnemyName1"],
       "summoner_spells": ["Flash", "Ignite"],
-      "early_game_plan": "Concise 1-2 sentence laning phase plan for this specific matchup",
-      "team_fighting_role": "Exactly what this champion does in teamfights in this comp"
+      "first_item": "ItemName",
+      "power_spike": "early|mid|late"
     }
   ],
   "team_analysis": {
-    "ally_damage_type": "e.g. Full-AD, Mostly-AD, Balanced, Full-AP",
-    "enemy_damage_type": "e.g. Mixed, Full-AD, Mostly-AP",
-    "missing_from_ally": ["gap1", "gap2"],
-    "enemy_win_condition": "What the enemy team is trying to do in 1 sentence"
+    "composition_type": "engage|poke|teamfight|splitpush|pick|protect",
+    "damage_split": "AP-heavy|AD-heavy|balanced",
+    "win_window": "early|mid|late|scaling",
+    "key_synergies": ["Synergy1", "Synergy2"],
+    "weaknesses": ["Weakness1"]
   },
-  "team_win_condition": "Full ally team win condition in 1-2 sentences assuming best pick is taken",
-  "composition_type": "engage" | "poke" | "teamfight" | "splitpush" | "pick" | "protect" | "scaling",
-  "power_curve": "early" | "mid" | "late" | "scaling",
-  "key_threats": ["Biggest enemy threats to respect, listed by champion name"],
-  "why_not": "1-2 sentences on which archetypes or damage types are UNSAFE to pick here and exactly why",
-  "draft_grade": "A" | "B" | "C",
-  "draft_grade_reason": "1 sentence explaining the grade based on the overall draft quality"
+  "why_not": "Brief explanation of what archetypes or picks to avoid and why",
+  "team_win_condition": "The specific sequence of events that leads to victory",
+  "composition_type": "teamfight|poke|engage|splitpush|pick|protect-the-carry",
+  "power_curve": "early|mid|late|scaling",
+  "key_threats": ["Threat1", "Threat2"],
+  "draft_grade": "A|B|C",
+  "draft_grade_reason": "Brief reason for the grade"
 }"""
 
 
 def _format_team(picks: list[str]) -> str:
     if not picks:
-        return "None yet"
-    lines = []
-    for p in picks:
-        lines.append(f"  - {p}")
-    return "\n".join(lines)
+        return "  (none yet)"
+    return "\n".join(f"  - {p}" for p in picks)
 
 
 async def get_draft_suggestions(
-    ally_picks: list[str],
-    enemy_picks: list[str],
-    role: str,
+    ally_picks:    list[str],
+    enemy_picks:   list[str],
+    role:          str,
     champion_pool: list[str] | None = None,
-    ban_mode: bool = False,
+    ban_mode:      bool = False,
 ) -> dict:
     """
     Call Groq to get Challenger-level draft recommendations.
@@ -167,50 +158,34 @@ IMPORTANT: Do NOT recommend any champion not in the pool above."""
     # ── Pre-compute damage balance (deterministic, not AI-guessed) ────────────
     dmg = analyze_team_damage(ally_picks)
 
-    # ── Fetch live lolalytics data: counter matchups + role tier list (parallel, no cache) ────
-    lolalytics_block = ""
+    # ── Fetch live lolalytics data (single call — reused for prompt + pool + tiers) ──
+    lolalytics_block:  str       = ""
+    verified_counters: list[str] = []
+    blacklist_names:   set[str]  = set()
+    tier_list_ref:     list[str] = []
+
     if not ban_mode and enemy_picks:
         try:
-            enemy_data, tier_list = await fetch_all_context(enemy_picks, role)
+            enemy_data, tier_list_ref = await fetch_all_context(enemy_picks, role)
 
-            # Identify the specific enemy champion in the same lane (direct 1v1 opponent)
+            # Identify the direct lane opponent
             enemy_laner = None
             for pick in enemy_picks:
-                # picks are formatted as "ChampName (Role)" e.g. "Cho'Gath (Mid)"
                 if f"({role})" in pick:
                     enemy_laner = pick.split("(")[0].strip()
                     break
 
-            lolalytics_block = build_lolalytics_context(enemy_data, tier_list, role, enemy_laner)
-        except Exception:
-            lolalytics_block = ""  # Graceful fallback
+            # Build lolalytics context block for the AI prompt
+            lolalytics_block = build_lolalytics_context(enemy_data, tier_list_ref, role, enemy_laner)
 
-    # ── Extract verified counter pool + global blacklist from lolalytics data ──
-    # These are built deterministically from real data — the AI cannot override them
-    verified_counters: list[str] = []  # Champions that WIN against the enemy laner
-    blacklist_names: set[str]   = set()  # Champions any enemy beats — forbidden to suggest
-
-    try:
-        if not ban_mode and enemy_picks:
-            enemy_data_ref, _ = await fetch_all_context(enemy_picks, role)
-
-            # Find the direct lane opponent
-            enemy_laner_ref = None
-            for pick in enemy_picks:
-                if f"({role})" in pick:
-                    enemy_laner_ref = pick.split("(")[0].strip()
-                    break
-
-            for data in enemy_data_ref:
-                # Blacklist: champions this enemy champion BEATS — never suggest these
+            # Build counter pool (verified wins) + blacklist (verified losses)
+            for data in enemy_data:
                 for c in data.get("easy_matchups", []):
                     blacklist_names.add(c["champion"].lower())
-
-                # Counter pool: only for the direct lane opponent
-                if enemy_laner_ref and data["champion"].lower() == enemy_laner_ref.lower():
+                if enemy_laner and data["champion"].lower() == enemy_laner.lower():
                     verified_counters = [c["champion"] for c in data.get("counters", [])]
-    except Exception:
-        pass  # Gracefully fall back to AI-only if data fetch fails
+        except Exception:
+            pass  # Graceful fallback
 
     # Build list of all champions already in the draft (cannot be suggested)
     all_draft_picks = [
@@ -237,7 +212,6 @@ Prioritize banning:
 
 Think through all 6 layers then return ONLY valid JSON."""
     else:
-        # Build the verified counter pool line for the prompt
         counter_pool_section = ""
         if verified_counters:
             counter_pool_section = f"""
@@ -287,11 +261,10 @@ Think through all 6 layers IN ORDER:
 Return ONLY valid JSON, no extra text."""
 
     # Try every combination of API key × model until one succeeds
-    # With 3 keys and 3 models = 9 attempts before giving up
     if not API_KEYS:
         raise RuntimeError("No GROQ_API_KEY found. Set at least one API key in environment variables.")
 
-    raw_text  = None
+    raw_text   = None
     last_error = None
 
     for api_key in API_KEYS:
@@ -308,18 +281,18 @@ Return ONLY valid JSON, no extra text."""
                     max_tokens=1400,
                 )
                 raw_text = response.choices[0].message.content.strip()
-                break  # Success — exit model loop
+                break
             except Exception as e:
                 last_error = e
                 err = str(e)
                 if any(x in err for x in ("rate_limit_exceeded", "429", "model_decommissioned", "model_not_found")):
-                    continue  # Skip to next model / key
-                raise  # Any other error — surface immediately
+                    continue
+                raise
         if raw_text is not None:
-            break  # Success — exit key loop
+            break
 
     if raw_text is None:
-        raise last_error  # All keys + models exhausted
+        raise last_error
 
     # Strip markdown code fences if present
     if raw_text.startswith("```"):
@@ -330,15 +303,30 @@ Return ONLY valid JSON, no extra text."""
 
     result = json.loads(raw_text)
 
-    # ── Python-level safety filter (catches AI hallucinations) ───────────────
-    # Remove any suggested champion that is in the blacklist (enemy beats them)
+    # ── Python-level safety filter — remove blacklisted picks ─────────────────
     if blacklist_names and result.get("recommendations"):
         filtered = [
             rec for rec in result["recommendations"]
             if rec.get("champion", "").lower() not in blacklist_names
         ]
-        # Only apply filter if it leaves at least 1 suggestion
         if filtered:
             result["recommendations"] = filtered
+
+    # ── Patch tier badges — computed from tier list position ──────────────────
+    # S = top 3, A = 4-8, B = 9-14, C = 15+, not listed = B
+    if tier_list_ref and result.get("recommendations"):
+        tier_map = {name.lower(): i for i, name in enumerate(tier_list_ref)}
+        for rec in result["recommendations"]:
+            pos = tier_map.get(rec.get("champion", "").lower())
+            if pos is None:
+                rec["patch_tier"] = "B"
+            elif pos < 3:
+                rec["patch_tier"] = "S"
+            elif pos < 8:
+                rec["patch_tier"] = "A"
+            elif pos < 14:
+                rec["patch_tier"] = "B"
+            else:
+                rec["patch_tier"] = "C"
 
     return result
