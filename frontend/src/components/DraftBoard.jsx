@@ -3,7 +3,7 @@ import { Swords, Shield, Wand2, Crosshair, Users, Brain, RefreshCw, Lock } from 
 import { toast } from "react-hot-toast";
 import ChampionSearch from "./ChampionSearch";
 import TeamSlot from "./TeamSlot";
-import RecommendationCard, { RecommendationSkeleton, WhyNotSection } from "./RecommendationCard";
+import RecommendationCard, { RecommendationSkeleton, WhyNotSection, TeamAnalysisPanel } from "./RecommendationCard";
 import { getSuggestions } from "../api/geminiApi";
 import { fetchAllChampions } from "../api/riotApi";
 import { useAuth } from "../context/AuthContext";
@@ -305,6 +305,7 @@ export default function DraftBoard() {
                   <span className="text-xs text-gold font-semibold uppercase tracking-widest">AI Recommendations</span>
                   <div className="divider-gold flex-1" />
                 </div>
+                <TeamAnalysisPanel teamAnalysis={result.team_analysis} />
                 {result.recommendations?.map((rec, i) => (
                   <RecommendationCard key={rec.champion} rec={rec} rank={i} isTopPick={i === 0} />
                 ))}
