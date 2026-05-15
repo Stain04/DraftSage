@@ -185,6 +185,33 @@ IMPORTANT: Do NOT recommend any champion not in the pool above."""
         except Exception:
             lolalytics_block = ""  # Graceful fallback
 
+    # ── Extract verified counter pool + global blacklist from lolalytics data ──
+    # These are built deterministically from real data — the AI cannot override them
+    verified_counters: list[str] = []  # Champions that WIN against the enemy laner
+    blacklist_names: set[str]   = set()  # Champions any enemy beats — forbidden to suggest
+
+    try:
+        if not ban_mode and enemy_picks:
+            enemy_data_ref, _ = await fetch_all_context(enemy_picks, role)
+
+            # Find the direct lane opponent
+            enemy_laner_ref = None
+            for pick in enemy_picks:
+                if f"({role})" in pick:
+                    enemy_laner_ref = pick.split("(")[0].strip()
+                    break
+
+            for data in enemy_data_ref:
+                # Blacklist: champions this enemy champion BEATS — never suggest these
+                for c in data.get("easy_matchups", []):
+                    blacklist_names.add(c["champion"].lower())
+
+                # Counter pool: only for the direct lane opponent
+                if enemy_laner_ref and data["champion"].lower() == enemy_laner_ref.lower():
+                    verified_counters = [c["champion"] for c in data.get("counters", [])]
+    except Exception:
+        pass  # Gracefully fall back to AI-only if data fetch fails
+
     # Build list of all champions already in the draft (cannot be suggested)
     all_draft_picks = [
         p.split("(")[0].strip() for p in ally_picks + enemy_picks if p
@@ -210,8 +237,20 @@ Prioritize banning:
 
 Think through all 6 layers then return ONLY valid JSON."""
     else:
+        # Build the verified counter pool line for the prompt
+        counter_pool_section = ""
+        if verified_counters:
+            counter_pool_section = f"""
+
+🎯 MANDATORY CANDIDATE POOL — verified by lolalytics real win-rate data:
+   These champions WIN the 1v1 matchup against the enemy {role} laner:
+   {', '.join(verified_counters)}
+   ⚠ Your 3 picks MUST come from this pool (filtered by AP/AD rule and synergy).
+   ⚠ Suggesting a champion NOT in this pool is only allowed if the AP/AD rule
+     forces you to AND you explain exactly why no pool champion fits."""
+
         user_message = f"""{dmg['hard_rule']}
-{lolalytics_block}
+{lolalytics_block}{counter_pool_section}
 
 {'='*55}
 Current draft state — recommend the top 3 picks for {role}.
@@ -233,14 +272,14 @@ WHAT I NEED:
 - FORBIDDEN damage type: {dmg['forbidden_type']}{pool_section}
 
 IMPORTANT:
+- The MANDATORY CANDIDATE POOL above is your PRIMARY source. Use it.
 - The MANDATORY DAMAGE RULE and CANNOT SUGGEST list override everything else.
-- Do NOT suggest a champion that is the same archetype as the enemy {role} laner.
 - Reference enemy and ally champions BY NAME in your reasoning.
 
 Think through all 6 layers IN ORDER:
 1. Identify both teams' win conditions.
 2. Damage balance is {dmg['label']}. Required: {dmg['required_type']}. DO NOT suggest {dmg['forbidden_type']}.
-3. Identify the enemy {role} laner's archetype — suggest a DIFFERENT archetype that beats it.
+3. From the CANDIDATE POOL, pick the best fits for this specific draft.
 4. Find synergies with existing ally picks.
 5. Confirm the pick is on the tier list and meta-viable.
 6. Assess difficulty, power spike timing, and summoner spells.
@@ -289,6 +328,17 @@ Return ONLY valid JSON, no extra text."""
             raw_text = raw_text[4:]
         raw_text = raw_text.strip()
 
-    return json.loads(raw_text)
+    result = json.loads(raw_text)
 
+    # ── Python-level safety filter (catches AI hallucinations) ───────────────
+    # Remove any suggested champion that is in the blacklist (enemy beats them)
+    if blacklist_names and result.get("recommendations"):
+        filtered = [
+            rec for rec in result["recommendations"]
+            if rec.get("champion", "").lower() not in blacklist_names
+        ]
+        # Only apply filter if it leaves at least 1 suggestion
+        if filtered:
+            result["recommendations"] = filtered
 
+    return result
