@@ -47,12 +47,24 @@ LAYER 2 - COMPOSITION ANALYSIS
 - Objective control: Baron, Dragon, Herald priority based on comp strengths.
 - Wave management: Do we have enough push/freeze options?
 
-LAYER 3 - COUNTER PICK LOGIC
-- Which enemy champion is the single biggest threat to our win condition?
-- Which available pick directly shuts down or minimizes that threat?
-- Is the counter pick viable in the current meta?
-- What is the risk of the counter pick (high skill ceiling? easily ganked? bad into other enemies?)
-- NEVER recommend a champion that loses the 1v1 lane to the enemy laner in that role.
+LAYER 3 - COUNTER PICK LOGIC (DATA-FIRST APPROACH)
+The LIVE LOLALYTICS DATA block in the user message contains real win-rate verified counters and a blacklist.
+You MUST follow this priority order:
+
+STEP 1 — Start from the lolalytics ✅ GOOD INTO list for the lane opponent.
+  These are champions that statistically WIN the 1v1 matchup on the current patch.
+  This is your primary candidate pool. Do NOT ignore it.
+
+STEP 2 — Cross-reference with the ⛔ DO NOT PICK list.
+  Any champion listed there LOSES the 1v1. They are forbidden regardless of any other reason.
+  Your "knowledge" about kits or synergies does NOT override a verified losing matchup.
+
+STEP 3 — Apply filters: AP/AD balance, synergy, already picked.
+  From the verified counter pool, pick those that also fit the comp.
+  Only if the counter pool is empty after filtering may you suggest outside it, with explicit justification.
+
+STEP 4 — Confirm meta viability via the tier list.
+  Champions not on the current patch tier list need a strong justification.
 
 LAYER 4 - SYNERGY ANALYSIS
 - Which pick amplifies existing ally win conditions?
@@ -73,8 +85,9 @@ LAYER 6 - PRACTICAL CONSIDERATIONS
 STRICT RULES:
 - The 3 recommendations MUST be from different champion archetypes/playstyles. Never suggest 3 of the same class.
 - NEVER recommend a champion that is already picked by either team — they are locked out of the draft.
-- NEVER recommend a champion that is hard-countered by an existing enemy pick.
-- A real counter requires at least a 3% statistical edge. A 50-51% win rate matchup is noise, not a counter — think carefully before labeling something a counter-pick.
+- NEVER recommend a champion from the ⛔ DO NOT PICK list — those champions LOSE the lane matchup on real patch data.
+- NEVER use your internal training "knowledge" to override the lolalytics win-rate data. Real data beats intuition.
+- A real counter requires at least a 3% statistical edge. A 50-51% win rate is noise, not a counter.
 - Always reference the SPECIFIC enemy and ally champions by name in your reasoning — no generic analysis.
 - If a champion pool is provided, ONLY recommend from that pool.
 
