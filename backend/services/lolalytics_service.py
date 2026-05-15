@@ -197,17 +197,22 @@ async def fetch_role_tier_list(role: str) -> list[str]:
 
 async def fetch_all_context(enemy_picks: list[str], role: str) -> tuple[list[dict], list[str]]:
     """
-    Fetch counter data for all enemy picks AND the role tier list in parallel.
-    Returns (enemy_counter_data, tier_list_names)
+    Fetch counter data for all enemy picks (each in their OWN role) + the role tier list, in parallel.
+    Using each champion's actual lane gives accurate matchup stats (Darius top ≠ Darius mid).
     """
-    counter_tasks = [fetch_champion_counters(champ, role) for champ in enemy_picks[:5]]
-    tier_task     = fetch_role_tier_list(role)
+    counter_tasks = []
+    for pick in enemy_picks[:5]:
+        champ_name = pick.split("(")[0].strip()
+        # Extract the enemy champion's own role from tag e.g. "Darius (Top)" → "Top"
+        role_match = re.search(r'\((\w+)\)', pick)
+        champ_role = role_match.group(1).capitalize() if role_match else role
+        counter_tasks.append(fetch_champion_counters(champ_name, champ_role))
 
-    results = await asyncio.gather(*counter_tasks, tier_task, return_exceptions=True)
+    tier_task = fetch_role_tier_list(role)  # tier list is still for the role being filled
+    results   = await asyncio.gather(*counter_tasks, tier_task, return_exceptions=True)
 
-    tier_list    = results[-1] if isinstance(results[-1], list) else []
-    enemy_data   = [r for r in results[:-1] if isinstance(r, dict) and not r.get("error")]
-
+    tier_list  = results[-1] if isinstance(results[-1], list) else []
+    enemy_data = [r for r in results[:-1] if isinstance(r, dict) and not r.get("error")]
     return enemy_data, tier_list
 
 
