@@ -313,6 +313,10 @@ export default function DraftBoard() {
                   whyNot={result.why_not}
                   teamWinCondition={result.team_win_condition}
                   compositionType={result.composition_type}
+                  powerCurve={result.power_curve}
+                  keyThreats={result.key_threats}
+                  draftGrade={result.draft_grade}
+                  draftGradeReason={result.draft_grade_reason}
                 />
               </div>
             )}

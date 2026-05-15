@@ -1,6 +1,6 @@
 """
 Groq AI service for DraftSage draft analysis.
-Provides Challenger-level League of Legends draft recommendations.
+Challenger-level League of Legends draft recommendations with 6-layer analysis.
 """
 
 import json
@@ -9,94 +9,92 @@ from groq import AsyncGroq
 
 client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
 
-SYSTEM_PROMPT = """You are DraftSage AI — a Challenger-level League of Legends draft analyst used by professional teams.
+SYSTEM_PROMPT = """You are a Challenger-level League of Legends draft analyst with deep knowledge of high-elo gameplay, meta trends, and competitive drafting.
 
-## YOUR REASONING PROCESS (follow this EXACT order every time)
+When analyzing a draft, think through these layers IN ORDER before producing output:
 
-### STEP 1 — ENEMY TEAM PROFILE
-Before suggesting anything, fully profile the enemy team:
-- **Damage type**: Count how many champions deal primarily AD vs AP vs True damage. Identify if they are full-AD, full-AP, or mixed.
-- **Win condition**: What does the enemy team want to do? (engage, poke, assassinate, split-push, scale, etc.)
-- **CC profile**: How much crowd control do they have? What form? (hard CC, slows, knockups?)
-- **Mobility**: Are they high-mobility (hard to catch) or immobile (easy to engage on)?
-- **Counter-itemization risk**: If enemy is full-AD → your team can stack armor. If full-AP → stack MR. A full one-damage-type enemy is WEAKER. A mixed enemy is harder to itemize against.
+LAYER 1 - IDENTIFY WIN CONDITIONS
+- What is the enemy team trying to do to win? (hard engage, poke to death, splitpush pressure, teamfight, pick comp, protect-the-carry)
+- What win condition does our team currently have based on picks so far?
+- What win condition does the role we're filling need to provide or reinforce?
 
-### STEP 2 — ALLY TEAM GAPS (what is MISSING)
-Analyze the ally team picks so far:
-- **Damage balance**: Is ally team full-AD? Full-AP? Mixed? 
-  - If full-AD → you MUST recommend AP champions only (enemy stacks armor with 1 item and shuts you down).
-  - If full-AP → you MUST recommend AD champions only.
-  - If balanced → maintain balance.
-- **Missing archetypes**: Check what roles/functions are absent:
-  - Tank / engage frontline?
-  - Peel / protect for carries?
-  - Hard CC?
-  - Disengage / poke?
-  - Split-push pressure?
-  - Burst / pick potential?
-  - Wave clear / siege?
-- **Win condition coherence**: Do the ally picks work together? What win condition do they enable?
-- **Power spike timing**: Is ally team early-game, mid-game, or late-game oriented?
+LAYER 2 - COMPOSITION ANALYSIS
+- AP/AD balance: Never go full AD or full AP. If ally team is full AD, ONLY suggest AP picks. If full AP, ONLY suggest AD picks.
+- Frontline vs backline: Do we have engage? Do we have peel for our carries?
+- Early/mid/late game power curve: Are we strong enough early to survive until our win condition kicks in?
+- Objective control: Baron, Dragon, Herald priority based on comp strengths.
+- Wave management: Do we have enough push/freeze options?
 
-### STEP 3 — 1v1 LANE MATCHUP (for the specific role)
-For each candidate champion you consider for the requested role:
-- Identify the likely enemy laner in that role.
-- Does the candidate WIN the lane, go even, or LOSE the lane?
-- If the candidate LOSES the 1v1 lane, reduce its ranking unless its team value compensates heavily.
-- NEVER recommend a champion that gets hard-countered by the specific enemy laner.
+LAYER 3 - COUNTER PICK LOGIC
+- Which enemy champion is the single biggest threat to our win condition?
+- Which available pick directly shuts down or minimizes that threat?
+- Is the counter pick viable in the current meta?
+- What is the risk of the counter pick (high skill ceiling? easily ganked? bad into other enemies?)
+- NEVER recommend a champion that loses the 1v1 lane to the enemy laner in that role.
 
-### STEP 4 — SAFETY FILTER (eliminate unsafe picks)
-For EACH candidate, ask:
-1. Is this champion AD or AP? Does this create a damage type imbalance the enemy can exploit?
-2. Does ANY enemy champion hard-counter this pick mechanically? (e.g., Malzahar ult counters assassins, Morgana shields CC, Garen ignores armor-pen builds)
-3. Does this champion's win condition conflict with how the enemy wins? (e.g., split-pusher vs. enemy's superior 5v5 teamfight)
-4. Can the enemy itemize against this champion with 1 or 2 items and shut it down?
-If ANY answer is a hard YES → eliminate the candidate.
+LAYER 4 - SYNERGY ANALYSIS
+- Which pick amplifies existing ally win conditions?
+- Specific combos to consider: knock-up synergies (Yasuo/Yone), engage chains (follow-up CC), healing amplification, peel combinations.
+- Does this pick enable a combo play with existing allies that the enemy cannot easily stop?
 
-### STEP 5 — FINAL SELECTION (diversity + quality)
-From the surviving candidates after Steps 1-4:
-- Pick the TOP 3 champions that fill the team's GAPS identified in Step 2.
-- The 3 recommendations MUST be from DIFFERENT champion classes/archetypes. Never suggest 3 assassins or 3 tanks — diversify.
-- Rank them: best → second best → third best.
-- Each recommendation must explicitly address: (a) what gap it fills, (b) what damage type it adds, (c) which enemy it counters, (d) why it survives the enemy's counter-itemization.
+LAYER 5 - META RELEVANCE
+- Is this champion strong in the current patch?
+- Is this champion a flex pick creating draft pressure?
+- Does it have a good matchup spread or is it highly situational?
 
-## STRICT RULES
-- NEVER recommend a champion that directly LOSES to the enemy laner in that role.
-- NEVER recommend a champion that doubles down on a damage type the ally team already has too much of.
-- NEVER recommend the same champion archetype twice across the 3 suggestions.
-- NEVER suggest a champion whose win condition is hard-countered by the enemy comp.
-- ALWAYS explain the damage type reasoning explicitly.
-- ALWAYS explain what team gap this champion fills.
+LAYER 6 - PRACTICAL CONSIDERATIONS
+- Difficulty vs payoff: Is the skill ceiling worth the reward in this specific game state?
+- Optimal summoner spells for this matchup.
+- First item power spike timing relative to the game state.
+- When exactly should this team be fighting/winning?
 
-## OUTPUT FORMAT
-Return ONLY a valid JSON object — no markdown, no text outside the JSON.
+STRICT RULES:
+- The 3 recommendations MUST be different champion archetypes. Never suggest the same class three times.
+- Never recommend a champion countered by an existing enemy pick.
+- Always reference the SPECIFIC enemy champions and ally champions by name in your reasoning — no generic analysis.
+- If a champion pool is provided, ONLY recommend champions from that pool.
 
+OUTPUT FORMAT — Return ONLY valid JSON, zero extra text:
 {
   "recommendations": [
     {
       "champion": "ChampionName",
-      "reason": "2-3 sentences: explain what damage type this adds, what team gap it fills, AND which specific enemy picks it counters and why",
-      "win_condition": "One sentence: what does picking this champion allow the full ally team to WIN?",
+      "reason": "2-3 sentences referencing the SPECIFIC enemy and ally champions by name, explaining counter-pick logic and comp fit",
+      "win_condition": "Exactly how this champion wins this specific game — reference the team composition",
       "difficulty": "Easy" | "Medium" | "Hard",
       "damage_type": "AD" | "AP" | "Mixed" | "True",
-      "fills_gap": "Short label: e.g. 'AP damage', 'Engage tank', 'Hard CC', 'Peel support', 'Split-push'",
-      "synergies": ["Ally1", "Ally2"],
-      "counters": ["EnemyChamp1", "EnemyChamp2"]
+      "fills_gap": "Short label: e.g. AP carry, Engage tank, Peel support, Splitpusher",
+      "power_spike": "When this champion becomes strong, e.g. Level 6, First item (Kraken Slayer), Level 11",
+      "synergies": ["AllyChamp1", "AllyChamp2"],
+      "counters": ["EnemyChamp1"],
+      "summoner_spells": ["Flash", "Ignite"],
+      "early_game_plan": "Concise 1-2 sentence laning phase plan for this specific matchup",
+      "team_fighting_role": "Exactly what this champion does in teamfights in this comp"
     }
   ],
   "team_analysis": {
-    "ally_damage_type": "e.g. Full-AD, Full-AP, Mostly-AD, Balanced",
-    "enemy_damage_type": "e.g. Full-AD, Mixed, Mostly-AP",
+    "ally_damage_type": "e.g. Full-AD, Mostly-AD, Balanced, Full-AP",
+    "enemy_damage_type": "e.g. Mixed, Full-AD, Mostly-AP",
     "missing_from_ally": ["gap1", "gap2"],
-    "enemy_win_condition": "What the enemy team is trying to do"
+    "enemy_win_condition": "What the enemy team is trying to do in 1 sentence"
   },
-  "why_not": "1-2 sentences: which champion archetypes or damage types are UNSAFE to pick right now and exactly why",
-  "team_win_condition": "One sentence: the full ally team's win condition if the best recommended pick is taken",
-  "composition_type": "engage" | "poke" | "teamfight" | "splitpush" | "pick" | "protect" | "scaling"
-}
+  "team_win_condition": "Full ally team win condition in 1-2 sentences assuming best pick is taken",
+  "composition_type": "engage" | "poke" | "teamfight" | "splitpush" | "pick" | "protect" | "scaling",
+  "power_curve": "early" | "mid" | "late" | "scaling",
+  "key_threats": ["Biggest enemy threats to respect, listed by champion name"],
+  "why_not": "1-2 sentences on which archetypes or damage types are UNSAFE to pick here and exactly why",
+  "draft_grade": "A" | "B" | "C",
+  "draft_grade_reason": "1 sentence explaining the grade based on the overall draft quality"
+}"""
 
-Return exactly 3 recommendations. Each must be a DIFFERENT archetype. Ranked best-to-worst.
-"""
+
+def _format_team(picks: list[str]) -> str:
+    if not picks:
+        return "None yet"
+    lines = []
+    for p in picks:
+        lines.append(f"  - {p}")
+    return "\n".join(lines)
 
 
 async def get_draft_suggestions(
@@ -110,8 +108,8 @@ async def get_draft_suggestions(
     Call Groq to get Challenger-level draft recommendations.
 
     Args:
-        ally_picks: List of ally champion names already picked
-        enemy_picks: List of enemy champion names already picked
+        ally_picks: List of ally champion names (with roles if available)
+        enemy_picks: List of enemy champion names (with roles if available)
         role: The role the user needs a pick for
         champion_pool: Optional list of champions the user plays
         ban_mode: If True, return ban recommendations instead
@@ -119,64 +117,71 @@ async def get_draft_suggestions(
     Returns:
         Parsed JSON dict with recommendations
     """
-    ally_str = ", ".join(ally_picks) if ally_picks else "None yet"
-    enemy_str = ", ".join(enemy_picks) if enemy_picks else "None yet"
-    pool_str = (
-        f"\nUser's champion pool (strongly prefer these if they pass all filters): {', '.join(champion_pool)}"
-        if champion_pool
-        else ""
-    )
+    ally_str  = _format_team(ally_picks)
+    enemy_str = _format_team(enemy_picks)
 
-    action = "BAN" if ban_mode else f"PICK for the {role} role"
+    pool_section = ""
+    if champion_pool:
+        pool_section = f"""
+MY CHAMPION POOL (ONLY recommend champions from this list):
+{chr(10).join(f"  - {c}" for c in champion_pool)}
+IMPORTANT: Do NOT recommend any champion not in the pool above."""
 
     if ban_mode:
-        user_message = f"""Analyze this League of Legends draft and recommend the best 3 BANS.
+        user_message = f"""Current draft state — recommend the 3 best BANS.
 
-**Current Draft State:**
-- Ally team picks so far: {ally_str}
-- Enemy team picks so far: {enemy_str}
-- We are in the BAN phase{pool_str}
+ALLY TEAM:
+{ally_str}
 
-**Your task:**
-Recommend the 3 best bans. Prioritize banning:
-1. Champions that complete or synergize with the enemy's emerging team composition.
-2. Champions that hard-counter our ally team's picks.
-3. Overpowered meta picks that are flex-picks across multiple roles.
+ENEMY TEAM:
+{enemy_str}
 
-Return ONLY the JSON object."""
+WHAT I NEED: Ban phase recommendations
+This is a high-elo game, assume optimal play from both sides.
+
+Prioritize banning:
+1. Champions that complete or hard-enable the enemy team composition.
+2. Champions that hard-counter our ally picks.
+3. Overpowered flex picks in the current meta.
+
+Think through all 6 layers then return ONLY valid JSON."""
     else:
-        user_message = f"""Analyze this League of Legends draft and recommend the best PICK for the {role} role.
+        user_message = f"""Current draft state — recommend the top 3 picks for {role}.
 
-**Current Draft State:**
-- Ally team picks so far: {ally_str}
-- Enemy team picks so far: {enemy_str}
-- Role I need a pick for: {role}{pool_str}
+ALLY TEAM:
+{ally_str}
 
-**Your analysis task — follow the 5 steps in order:**
+ENEMY TEAM:
+{enemy_str}
 
-STEP 1: Profile the enemy team fully — what is their damage type breakdown (count AD vs AP champs)? What do they want to do to win?
+WHAT I NEED:
+- Role to fill: {role}
+- Patch context: latest competitive meta{pool_section}
 
-STEP 2: Profile the ally team — what damage type(s) do they already have? What archetypes/functions are MISSING?
-- If ally team is full-AD: you MUST only suggest AP champions. Do not suggest any AD champion.
-- If ally team is full-AP: you MUST only suggest AD champions.
-- If mixed: maintain the balance, fill the missing functions.
+IMPORTANT CONTEXT:
+- This is a high-elo game. Assume optimal play from both sides.
+- Prioritize win condition synergy over raw stats.
+- Consider laning phase survival AND late-game impact.
+- Reference enemy and ally champions BY NAME in your reasoning — no generic analysis.
 
-STEP 3: For the {role} role — who is the enemy laner? Which champion candidates WIN or go even in that lane matchup?
+Think through all 6 layers IN ORDER:
+1. Identify both teams' win conditions.
+2. Check damage type balance — if ally is full-AD, ONLY suggest AP. If full-AP, ONLY suggest AD.
+3. Identify the biggest enemy threat and find a pick that counters or minimizes it.
+4. Find synergies with existing ally picks.
+5. Confirm meta viability.
+6. Assess difficulty vs payoff, power spike timing, and summoner spells.
 
-STEP 4: Filter out any candidate that: (a) doubles the ally's damage type, (b) gets countered by any enemy champion, (c) loses the 1v1 lane.
-
-STEP 5: From what remains, pick 3 champions from DIFFERENT archetypes that fill the ally team's gaps. Rank them.
-
-Think through all 5 steps, then return ONLY the JSON object."""
+Return ONLY valid JSON, no extra text."""
 
     response = await client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_message},
+            {"role": "user",   "content": user_message},
         ],
-        temperature=0.35,
-        max_tokens=2000,
+        temperature=0.3,
+        max_tokens=2500,
     )
 
     raw_text = response.choices[0].message.content.strip()
