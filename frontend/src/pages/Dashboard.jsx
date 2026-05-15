@@ -3,7 +3,6 @@ import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { Brain, History, Zap, User, LogOut, Trophy, Calendar, KeyRound, Eye, EyeOff, CheckCircle, X, ExternalLink } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../context/AuthContext";
-import api from "../api/geminiApi";
 import { toast } from "react-hot-toast";
 
 const USAGE_KEY = "draftsage_daily_usage";
@@ -19,7 +18,7 @@ function getDailyUsage() {
 }
 
 export default function Dashboard() {
-  const { user, signOut, loading, isPro, isAdmin } = useAuth();
+  const { user, signOut, loading, isPro } = useAuth();
   const [usage] = useState(getDailyUsage());
   const [searchParams, setSearchParams] = useSearchParams();
   const [showUpgradeBanner, setShowUpgradeBanner] = useState(false);

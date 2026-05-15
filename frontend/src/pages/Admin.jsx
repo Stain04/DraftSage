@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import {
-  Users, ShieldCheck, Zap, Trash2, Crown,
+  Users, ShieldCheck, Crown,
   RefreshCw, Search, ToggleLeft, ToggleRight, AlertTriangle
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
