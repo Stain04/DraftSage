@@ -167,6 +167,11 @@ async def lemonsqueezy_webhook(request: Request):
         if user_id:
             _set_user_pro(user_id, False)
 
+    # ── Subscription resumed from pause → re-grant Pro ────────────────────────
+    elif event_name == "subscription_resumed":
+        if user_id:
+            _set_user_pro(user_id, True)
+
     else:
         print(f"[LemonSqueezy] Unhandled event: {event_name}")
 
