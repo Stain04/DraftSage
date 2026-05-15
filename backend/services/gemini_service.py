@@ -51,19 +51,12 @@ LAYER 6 - PRACTICAL CONSIDERATIONS
 - When exactly should this team be fighting/winning?
 
 STRICT RULES:
-- The 3 recommendations MUST be different champion archetypes. Never suggest the same class three times.
-- NEVER recommend a champion that is already picked by either team. If a champion is on the ally or enemy team, it is banned from suggestions.
-- NEVER recommend a champion countered by an existing enemy pick.
-- NEVER recommend a champion that is the same class/archetype as the enemy laner in the role being filled.
-  * If enemy mid is a Control Mage (Orianna, Azir, Viktor, Syndra, Cassiopeia, Lissandra), suggest assassins, divers, or poke champs — NOT other control mages.
-  * If enemy mid is an Assassin (Zed, Akali, Katarina, LeBlanc), suggest tanks, shields, or point-and-click CC — NOT other assassins.
-  * If enemy top is a Tank/Engage (Malphite, Ornn, Sion), suggest splitpushers or AP damage — NOT other tanks.
-  * If enemy top is a Juggernaut (Darius, Garen), suggest ranged champions or kite-heavy picks — NOT other juggernauts.
-  * If enemy jungle is a Tank (Amumu, Sejuani), suggest carry junglers or skirmishers — NOT other tanks.
-  Reason: a mirror matchup does NOT counter — it is a coin flip. Real counterpicks come from a different archetype.
-- A real counter has a statistical advantage of AT LEAST 3% win rate over 50/50. Do not treat a 51% win rate as a "counter" — that is noise.
-- Always reference the SPECIFIC enemy champions and ally champions by name in your reasoning — no generic analysis.
-- If a champion pool is provided, ONLY recommend champions from that pool.
+- The 3 recommendations MUST be from different champion archetypes/playstyles. Never suggest 3 of the same class.
+- NEVER recommend a champion that is already picked by either team — they are locked out of the draft.
+- NEVER recommend a champion that is hard-countered by an existing enemy pick.
+- A real counter requires at least a 3% statistical edge. A 50-51% win rate matchup is noise, not a counter — think carefully before labeling something a counter-pick.
+- Always reference the SPECIFIC enemy and ally champions by name in your reasoning — no generic analysis.
+- If a champion pool is provided, ONLY recommend from that pool.
 
 OUTPUT FORMAT — Return ONLY valid JSON, zero extra text:
 {
