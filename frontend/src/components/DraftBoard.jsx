@@ -50,6 +50,19 @@ export default function DraftBoard() {
   const [champLoading, setChampLoading] = useState(true);
   const [result, setResult] = useState(null);
   const [usage, setUsage] = useState(getDailyUsage());
+
+  // Roles that already have an ally champion assigned — cannot be selected
+  const takenAllyRoles = new Set(
+    allyPicks.filter((s) => s.champion).map((s) => s.role)
+  );
+
+  // If the currently selected role becomes taken, auto-switch to next free role
+  useEffect(() => {
+    if (takenAllyRoles.has(role)) {
+      const next = ROLES.find((r) => !takenAllyRoles.has(r.id));
+      if (next) setRole(next.id);
+    }
+  }, [allyPicks]); // eslint-disable-line
   // drag-and-drop state — separate for each side
   const [dragIndex,      setDragIndex]      = useState(null);
   const [dragOverIndex,  setDragOverIndex]  = useState(null);
@@ -239,20 +252,34 @@ export default function DraftBoard() {
             <div className="card rounded-2xl p-5">
               <h2 className="font-semibold text-white mb-3 text-center">Your Role</h2>
               <div className="grid grid-cols-5 gap-2">
-                {ROLES.map((r) => (
-                  <button
-                    key={r.id}
-                    onClick={() => setRole(r.id)}
-                    className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-all text-xs font-medium
-                      ${role === r.id
-                        ? "border-gold bg-gold/10 text-gold shadow-gold animate-pulse-gold"
-                        : "border-navy-600 text-navy-400 hover:border-navy-400 hover:text-white"
-                      }`}
-                  >
-                    {r.icon}
-                    <span>{r.label}</span>
-                  </button>
-                ))}
+              {ROLES.map((r) => {
+                  const isTaken = takenAllyRoles.has(r.id);
+                  const isSelected = role === r.id;
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() => !isTaken && setRole(r.id)}
+                      disabled={isTaken}
+                      title={isTaken ? `${r.label} is already picked` : r.label}
+                      className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-all text-xs font-medium relative
+                        ${
+                          isTaken
+                            ? "border-navy-700 bg-navy-800/40 text-navy-600 cursor-not-allowed opacity-50"
+                            : isSelected
+                            ? "border-gold bg-gold/10 text-gold shadow-gold animate-pulse-gold"
+                            : "border-navy-600 text-navy-400 hover:border-navy-400 hover:text-white"
+                        }`}
+                    >
+                      {isTaken ? <Lock size={14} /> : r.icon}
+                      <span>{r.label}</span>
+                      {isTaken && (
+                        <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-navy-700 border border-navy-500 flex items-center justify-center">
+                          <Lock size={8} className="text-navy-400" />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
