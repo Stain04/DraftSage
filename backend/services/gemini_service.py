@@ -159,7 +159,16 @@ IMPORTANT: Do NOT recommend any champion not in the pool above."""
     if not ban_mode and enemy_picks:
         try:
             enemy_data, tier_list = await fetch_all_context(enemy_picks, role)
-            lolalytics_block = build_lolalytics_context(enemy_data, tier_list, role)
+
+            # Identify the specific enemy champion in the same lane (direct 1v1 opponent)
+            enemy_laner = None
+            for pick in enemy_picks:
+                # picks are formatted as "ChampName (Role)" e.g. "Cho'Gath (Mid)"
+                if f"({role})" in pick:
+                    enemy_laner = pick.split("(")[0].strip()
+                    break
+
+            lolalytics_block = build_lolalytics_context(enemy_data, tier_list, role, enemy_laner)
         except Exception:
             lolalytics_block = ""  # Graceful fallback
 

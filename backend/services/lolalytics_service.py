@@ -211,10 +211,10 @@ async def fetch_all_context(enemy_picks: list[str], role: str) -> tuple[list[dic
     return enemy_data, tier_list
 
 
-def build_lolalytics_context(enemy_data: list[dict], tier_list: list[str], role: str) -> str:
+def build_lolalytics_context(enemy_data: list[dict], tier_list: list[str], role: str, enemy_laner: str | None = None) -> str:
     """
     Build the complete live-data block to inject into the AI prompt.
-    Includes: counter data per enemy champion + current patch tier list + diversity requirement.
+    Includes: who beats each enemy, who each enemy beats (blacklist), tier list, diversity rule.
     """
     patch = enemy_data[0].get("patch_note", "current patch") if enemy_data else "current patch"
     lines = [
@@ -223,22 +223,58 @@ def build_lolalytics_context(enemy_data: list[dict], tier_list: list[str], role:
         f"{'='*60}",
     ]
 
-    # Enemy counter data
+    # ── Direct lane opponent section ──────────────────────────────────────────
+    if enemy_laner:
+        lane_data = next((d for d in enemy_data if d["champion"].lower() == enemy_laner.lower()), None)
+        if lane_data:
+            avoid_picks = lane_data.get("easy_matchups", [])
+            counter_picks = lane_data.get("counters", [])
+
+            lines += [
+                "",
+                f"🎯 YOUR DIRECT LANE OPPONENT: {enemy_laner}",
+                f"   Role: {role}",
+            ]
+
+            if avoid_picks:
+                avoid_parts = [
+                    f"{c['champion']} (loses by {round(c['wr_for_them'] - 50, 1):+.1f}%)"
+                    for c in avoid_picks[:8]
+                ]
+                lines += [
+                    f"",
+                    f"⛔ DO NOT PICK THESE — {enemy_laner} BEATS THEM on this patch:",
+                    f"   {', '.join(avoid_parts)}",
+                    f"   These champions LOSE the 1v1 matchup. Never suggest them.",
+                ]
+
+            if counter_picks:
+                good_parts = [
+                    f"{c['champion']} (wins by +{c['advantage']:.1f}%)"
+                    for c in counter_picks[:6]
+                ]
+                lines += [
+                    f"",
+                    f"✅ GOOD INTO {enemy_laner} — these champions WIN the matchup:",
+                    f"   {', '.join(good_parts)}",
+                ]
+
+    # ── All enemy champions counter data ─────────────────────────────────────
     if enemy_data:
-        lines += ["", "COUNTERS TO EACH ENEMY CHAMPION (real win-rate data):"]
+        lines += ["", "─── ALL ENEMY PICKS — Counter Reference ───"]
         for data in enemy_data:
             champ    = data["champion"]
             counters = data.get("counters", [])
-            if not counters:
-                lines.append(f"  ⚔ {champ}: insufficient data")
-                continue
-            parts = [
-                f"{c['champion']} ({c['advantage']:+.1f}% edge)"
-                for c in counters[:6]
-            ]
-            lines.append(f"  ⚔ {champ} loses to: {', '.join(parts)}")
+            avoided  = data.get("easy_matchups", [])
 
-    # Role tier list
+            if counters:
+                parts = [f"{c['champion']} (+{c['advantage']:.1f}%)" for c in counters[:5]]
+                lines.append(f"  ⚔ {champ} loses to: {', '.join(parts)}")
+            if avoided:
+                avoid_str = ", ".join(c["champion"] for c in avoided[:5])
+                lines.append(f"  ⚠ {champ} beats: {avoid_str} — avoid suggesting these")
+
+    # ── Role tier list ────────────────────────────────────────────────────────
     if tier_list:
         top15 = tier_list[:15]
         lines += [
@@ -246,26 +282,20 @@ def build_lolalytics_context(enemy_data: list[dict], tier_list: list[str], role:
             f"CURRENT PATCH {role.upper()} TIER LIST (strongest → weakest):",
             f"  {' > '.join(top15)}",
             "",
-            "Use this tier list to ensure your recommendations are VIABLE this patch.",
-            "Do NOT recommend champions that are not on this tier list unless they have",
-            "a compelling and specific reason to be picked in this draft.",
+            "Only recommend champions from this tier list unless there is a specific strong reason.",
         ]
 
-    # Playstyle diversity requirement
+    # ── Playstyle diversity ───────────────────────────────────────────────────
     playstyles = ROLE_PLAYSTYLES.get(role, [])
     if playstyles:
         lines += [
             "",
-            f"MANDATORY DIVERSITY RULE FOR {role.upper()} PICKS:",
-            "Your 3 recommendations MUST cover exactly these 3 different playstyles.",
-            "One pick per category — NEVER recommend 2 picks from the same category:",
+            f"MANDATORY DIVERSITY — 3 different playstyle categories for {role.upper()}:",
         ]
         for i, ps in enumerate(playstyles, 1):
             lines.append(f"  Category {i}: {ps}")
-        lines += [
-            "",
-            "This ensures the player gets genuinely different options to choose from.",
-        ]
+        lines.append("One pick per category. Never recommend 2 from the same category.")
 
-    lines.append(f"{'='*60}\n")
+    lines.append(f"\n{'='*60}\n")
     return "\n".join(lines)
+
