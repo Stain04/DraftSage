@@ -1,0 +1,99 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  
+  body {
+    @apply bg-navy-900 text-white font-sans;
+    background-image: 
+      radial-gradient(ellipse at 20% 50%, rgba(30,42,110,0.3) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(200,169,81,0.05) 0%, transparent 50%);
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-navy-900; }
+  ::-webkit-scrollbar-thumb { @apply bg-navy-600 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-gold-dark; }
+}
+
+@layer components {
+  /* Gold border cards */
+  .card {
+    @apply bg-navy-800 rounded-xl border border-navy-600 shadow-card;
+    background: linear-gradient(135deg, rgba(17,28,78,0.95), rgba(6,10,30,0.98));
+  }
+
+  .card-gold {
+    @apply card border-gold/30;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(200,169,81,0.2), inset 0 1px 0 rgba(200,169,81,0.05);
+  }
+
+  /* Gold buttons */
+  .btn-gold {
+    @apply px-6 py-3 rounded-lg font-semibold text-navy-900 transition-all duration-200;
+    background: linear-gradient(135deg, #C8A951, #F0D78C, #C8A951);
+    background-size: 200% 100%;
+    background-position: 0% 0%;
+  }
+  .btn-gold:hover {
+    background-position: 100% 0%;
+    @apply shadow-gold scale-[1.02];
+  }
+  .btn-gold:active { @apply scale-[0.98]; }
+
+  /* Ghost button */
+  .btn-ghost {
+    @apply px-6 py-3 rounded-lg font-semibold text-gold border border-gold/30 transition-all duration-200;
+    @apply hover:bg-gold/10 hover:border-gold/60 active:scale-95;
+  }
+
+  /* Champion icon */
+  .champion-icon {
+    @apply rounded-lg overflow-hidden border-2 border-navy-600 transition-all duration-200 cursor-pointer;
+    @apply hover:border-gold hover:shadow-gold hover:scale-105;
+  }
+  .champion-icon.selected { @apply border-gold shadow-gold; }
+
+  /* Slot */
+  .team-slot {
+    @apply flex items-center gap-3 p-3 rounded-xl border border-navy-600 bg-navy-800/50;
+    @apply transition-all duration-200;
+  }
+  .team-slot.ally { @apply border-blue-500/30 hover:border-blue-400/60; }
+  .team-slot.enemy { @apply border-red-500/30 hover:border-red-400/60; }
+
+  /* Difficulty badge */
+  .badge-easy   { @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30; }
+  .badge-medium { @apply bg-amber-500/20 text-amber-400 border border-amber-500/30; }
+  .badge-hard   { @apply bg-red-500/20 text-red-400 border border-red-500/30; }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    @apply bg-navy-700 rounded-lg overflow-hidden relative;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+    animation: shimmer 1.5s infinite;
+    background-size: 200% 100%;
+  }
+
+  /* Divider */
+  .divider-gold {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(200,169,81,0.4), transparent);
+  }
+}
+
+/* Glassmorphism utility */
+.glass {
+  backdrop-filter: blur(12px);
+  background: rgba(17, 28, 78, 0.6);
+  border: 1px solid rgba(200, 169, 81, 0.1);
+}

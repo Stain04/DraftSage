@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+backend/.env
+
+# Node
+frontend/node_modules/
+frontend/build/
+frontend/.env
+
+# Test scripts
+test_auth.py
+
+# OS
+.DS_Store
+Thumbs.db
