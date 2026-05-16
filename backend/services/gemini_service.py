@@ -280,7 +280,12 @@ Return ONLY valid JSON, no extra text."""
                     temperature=0.72,
                     max_tokens=1400,
                 )
-                raw_text = response.choices[0].message.content.strip()
+                raw_text = response.choices[0].message.content
+                if not raw_text or not raw_text.strip():
+                    last_error = RuntimeError("Groq returned empty content.")
+                    raw_text = None
+                    continue
+                raw_text = raw_text.strip()
                 break
             except Exception as e:
                 last_error = e
@@ -292,16 +297,31 @@ Return ONLY valid JSON, no extra text."""
             break
 
     if raw_text is None:
-        raise last_error
+        raise last_error or RuntimeError("All Groq API keys exhausted.")
 
-    # Strip markdown code fences if present
-    if raw_text.startswith("```"):
-        raw_text = raw_text.split("```")[1]
-        if raw_text.startswith("json"):
-            raw_text = raw_text[4:]
-        raw_text = raw_text.strip()
+    # ── Robust JSON extraction ─────────────────────────────────────────────────
+    # 1. Strip markdown code fences (```json ... ```)
+    if "```" in raw_text:
+        fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw_text)
+        if fenced:
+            raw_text = fenced.group(1).strip()
 
-    result = json.loads(raw_text)
+    # 2. If still not pure JSON, extract the first { ... } block
+    if not raw_text.startswith("{"):
+        brace_match = re.search(r"\{[\s\S]*\}", raw_text)
+        if brace_match:
+            raw_text = brace_match.group(0)
+
+    if not raw_text:
+        raise RuntimeError("Groq returned an empty response. Try again.")
+
+    try:
+        result = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"AI returned non-JSON output. Try again. (raw: {raw_text[:120]!r})"
+        ) from exc
+
 
     # ── Python-level safety filter — remove blacklisted picks ─────────────────
     if blacklist_names and result.get("recommendations"):
