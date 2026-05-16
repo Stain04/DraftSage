@@ -37,18 +37,36 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow frontend origin(s)
+# CORS — allow frontend origin(s).
+# Baseline list is hardcoded so the app keeps working if ALLOWED_ORIGINS
+# env var is missing or misconfigured. Add new production domains here.
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-# Support comma-separated list of origins (e.g. localhost + Vercel preview URLs)
+BASELINE_ORIGINS = [
+    "http://localhost:3000",                # local dev
+    "https://draft-sage-five.vercel.app",   # Vercel default domain
+    "https://draftsage.pro",                # custom domain (apex)
+    "https://www.draftsage.pro",            # custom domain (www)
+    FRONTEND_URL,
+]
+# Extra origins can be added via env var (comma-separated)
 _origins_env = os.getenv("ALLOWED_ORIGINS", "")
-ALLOWED_ORIGINS = (
-    [o.strip() for o in _origins_env.split(",") if o.strip()]
-    if _origins_env
-    else [FRONTEND_URL, "http://localhost:3000"]
-)
+EXTRA_ORIGINS = [o.strip() for o in _origins_env.split(",") if o.strip()]
+
+# De-dup while preserving order
+_seen = set()
+ALLOWED_ORIGINS: list[str] = []
+for origin in BASELINE_ORIGINS + EXTRA_ORIGINS:
+    if origin and origin not in _seen:
+        ALLOWED_ORIGINS.append(origin)
+        _seen.add(origin)
+
+# Regex covers all Vercel preview deploys (draft-sage-xxx-stain04s-projects.vercel.app)
+VERCEL_PREVIEW_REGEX = r"^https://draft-sage(-[a-z0-9]+)*\.vercel\.app$"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=VERCEL_PREVIEW_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
