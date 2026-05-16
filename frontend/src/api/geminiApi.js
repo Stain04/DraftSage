@@ -17,12 +17,37 @@ const api = axios.create({
 // eslint-disable-next-line no-console
 console.info("[DraftSage] Engine endpoint:", BASE_URL);
 
-// Attach auth token if present
+// Attach auth token + session id if present
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("draftsage_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  const token     = localStorage.getItem("draftsage_token");
+  const sessionId = localStorage.getItem("draftsage_session_id");
+  if (token)     config.headers.Authorization  = `Bearer ${token}`;
+  if (sessionId) config.headers["X-Session-Id"] = sessionId;
   return config;
 });
+
+// Detect session-invalidated responses and force a clean logout.
+// Triggered when another device signs in with this account and invalidates
+// our session_id. We clear local state and redirect to login with a
+// querystring the Login page can read to show a friendly message.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const detail = error?.response?.data?.detail;
+    if (status === 401 && detail === "session_invalidated") {
+      try {
+        localStorage.removeItem("draftsage_token");
+        localStorage.removeItem("draftsage_session_id");
+      } catch { /* ignore */ }
+      // Don't redirect if we're already on /login (prevents loops)
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.replace("/login?reason=session_invalidated");
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 /** Fetch the full champion list from backend (backed by Data Dragon) */
 export const fetchChampions = async (search = "") => {
@@ -104,7 +129,15 @@ export function describeApiError(err, fallback = "Something went wrong. Please t
     return "Couldn't reach the Engine. If you use an ad-blocker, allow draftsage-production.up.railway.app and reload.";
   }
   const s = err?.response?.status;
-  if (s === 401) return "Please sign in again.";
+  if (s === 401) {
+    // session_invalidated is already handled by the response interceptor
+    // (forced redirect to /login); show a quieter message for the brief
+    // moment before the navigation kicks in.
+    if (err?.response?.data?.detail === "session_invalidated") {
+      return "Signed in on another device — please sign in again.";
+    }
+    return "Please sign in again.";
+  }
   if (s === 429) return "You've hit the daily limit. Upgrade to Pro for unlimited Engine runs.";
   if (s === 502 || s === 503 || s === 504) {
     return "Engine is temporarily unavailable. Try again in a few seconds.";

@@ -1,11 +1,16 @@
 """
-Auth routes — Supabase-backed user registration and login.
+Auth routes — Supabase-backed user registration, login, session-claim.
 """
 
-from fastapi import APIRouter, HTTPException
+import uuid
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 import os
 from supabase import create_client, Client
+
+from auth_utils import (
+    extract_bearer_token, verify_jwt, get_admin_supabase,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -68,3 +73,38 @@ async def login(body: LoginRequest):
 @router.post("/logout")
 async def logout():
     return {"message": "Logged out successfully."}
+
+
+# ── Session claim ─────────────────────────────────────────────────────────────
+# Concurrent-session-limit enforcement: each new sign-in calls this to mint a
+# fresh session_id and store it on the user's metadata. Future requests must
+# present the matching X-Session-Id; older devices' sessions become invalid.
+
+@router.post("/claim-session")
+async def claim_session(request: Request):
+    """
+    Mint a new session_id, store it on user_metadata.current_session_id,
+    and return it. Invalidates any previously-active session for this account.
+    Frontend stores the returned id and sends it back via the X-Session-Id
+    header on subsequent requests.
+    """
+    token = extract_bearer_token(request)
+    user  = verify_jwt(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired token.")
+
+    new_session_id = str(uuid.uuid4())
+    existing_meta  = user.user_metadata or {}
+
+    try:
+        sb_admin = get_admin_supabase()
+        sb_admin.auth.admin.update_user_by_id(
+            user.id,
+            {"user_metadata": {**existing_meta, "current_session_id": new_session_id}},
+        )
+    except Exception as e:
+        # If we can't update metadata, don't break sign-in — just don't enforce.
+        print(f"[claim-session] update_user_by_id failed for {user.id}: {e}")
+        return {"session_id": new_session_id, "enforced": False}
+
+    return {"session_id": new_session_id, "enforced": True}

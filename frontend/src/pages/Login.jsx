@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Mail, Lock, User, Eye, EyeOff, Sword } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, Sword, AlertTriangle } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../context/AuthContext";
 import { toast } from "react-hot-toast";
@@ -9,7 +9,9 @@ export default function Login() {
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const redirect = new URLSearchParams(location.search).get("redirect") || "/draft";
+  const params   = new URLSearchParams(location.search);
+  const redirect = params.get("redirect") || "/draft";
+  const reason   = params.get("reason");
 
   const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
   const [email, setEmail] = useState("");
@@ -72,6 +74,19 @@ export default function Login() {
 
         <div className="card-gold rounded-2xl p-8 relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-px bg-gold-gradient opacity-60" />
+
+          {/* Session-invalidated banner */}
+          {reason === "session_invalidated" && (
+            <div className="mb-5 flex items-start gap-2.5 p-3 rounded-lg border border-magenta/40 bg-magenta/10 animate-fade-in">
+              <AlertTriangle size={16} className="text-magenta flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-navy-100 leading-relaxed">
+                <p className="font-semibold text-magenta mb-0.5">Signed in elsewhere</p>
+                <p className="text-navy-300">
+                  Your account was used to sign in on another device. Only one active session is allowed per account — please sign in again.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Tab switcher */}
           <div className="flex rounded-xl overflow-hidden border border-navy-600 mb-6">

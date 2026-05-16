@@ -27,6 +27,40 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Backend API URL — needed by claim-session call here (we can't import from
+// api/geminiApi.js without creating a circular dep, so define locally).
+const API_URL = clean(process.env.REACT_APP_API_URL || "https://draftsage-production.up.railway.app");
+
+const SESSION_ID_KEY = "draftsage_session_id";
+
+/**
+ * Mint a new session_id with the backend. Invalidates any previously-active
+ * session for this account (concurrent-session-limit enforcement).
+ * Stores the new id in localStorage so the API client can send it back via
+ * the X-Session-Id header.
+ */
+async function claimNewSession(accessToken) {
+  if (!accessToken) return;
+  try {
+    const res = await fetch(`${API_URL}/api/auth/claim-session`, {
+      method:  "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type":  "application/json",
+      },
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data?.session_id) {
+      localStorage.setItem(SESSION_ID_KEY, data.session_id);
+    }
+  } catch {
+    // Soft-fail — if the claim call fails, the user is still signed in,
+    // just without the concurrent-session-limit enforcement applied to
+    // this session. Better than blocking login on a backend blip.
+  }
+}
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -34,6 +68,9 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Restoring an existing session at app load — DO NOT claim a new
+    // session_id here (that would invalidate the user's other-tab session).
+    // We just keep using whatever session_id is already in localStorage.
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         setUser(session.user);
@@ -42,13 +79,19 @@ export function AuthProvider({ children }) {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
         setUser(session.user);
         localStorage.setItem("draftsage_token", session.access_token);
+        // Only mint a new session_id on actual SIGN_IN (and sign-up auto-login),
+        // NOT on TOKEN_REFRESHED or INITIAL_SESSION events.
+        if (event === "SIGNED_IN") {
+          claimNewSession(session.access_token);
+        }
       } else {
         setUser(null);
         localStorage.removeItem("draftsage_token");
+        localStorage.removeItem(SESSION_ID_KEY);
       }
     });
 
@@ -88,6 +131,7 @@ export function AuthProvider({ children }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     localStorage.removeItem("draftsage_token");
+    localStorage.removeItem(SESSION_ID_KEY);
     setUser(null);
   };
 
