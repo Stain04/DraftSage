@@ -178,7 +178,7 @@ export default function Pricing() {
           </div>
 
           {/* Pro plan */}
-          <div className="card-premium hud-corners p-7 flex flex-col relative animate-slide-up glow-frame bg-noise"
+          <div className="card-premium p-7 flex flex-col relative animate-slide-up glow-frame"
                style={{ animationDelay: "0.1s" }}>
             <div className="absolute top-0 left-0 right-0 h-px bg-gold-gradient" />
 
