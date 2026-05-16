@@ -97,3 +97,125 @@
   background: rgba(17, 28, 78, 0.6);
   border: 1px solid rgba(200, 169, 81, 0.1);
 }
+
+/* ── Cinematic premium utilities ──────────────────────────────────────── */
+
+/* Animated grid background — for hero sections */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(200,169,81,0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200,169,81,0.07) 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: center;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+}
+
+/* Subtle noise texture — adds film grain feel */
+.bg-noise {
+  position: relative;
+}
+.bg-noise::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Aurora glow blobs — used as decorative background elements */
+.aurora-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  pointer-events: none;
+  animation: aurora-drift 12s ease-in-out infinite alternate;
+}
+@keyframes aurora-drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(40px, -30px) scale(1.15); }
+}
+
+/* Gradient text helper — usable on any heading */
+.text-gradient-gold {
+  background: linear-gradient(135deg, #F0D78C 10%, #C8A951 50%, #F0D78C 90%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.text-gradient-cool {
+  background: linear-gradient(135deg, #4FC3F7 10%, #CE93D8 50%, #4DB6AC 90%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Premium card — heavier shadow + subtle inner glow */
+.card-premium {
+  @apply rounded-2xl border border-gold/25;
+  background:
+    linear-gradient(135deg, rgba(17,28,78,0.85), rgba(6,10,30,0.95)),
+    radial-gradient(circle at 30% 0%, rgba(200,169,81,0.10), transparent 60%);
+  background-blend-mode: normal;
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.5),
+    0 0 0 1px rgba(200,169,81,0.18),
+    inset 0 1px 0 rgba(200,169,81,0.10);
+}
+
+/* Animated gradient border — for hero CTAs / featured cards */
+@keyframes border-spin {
+  to { transform: rotate(360deg); }
+}
+.border-conic::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: conic-gradient(from 0deg, transparent 0deg, #C8A951 60deg, transparent 120deg, transparent 240deg, #4FC3F7 300deg, transparent 360deg);
+  animation: border-spin 6s linear infinite;
+  z-index: -1;
+}
+
+/* Floating animation for hero ornaments */
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-12px); }
+}
+.animate-float { animation: float-y 5s ease-in-out infinite; }
+
+/* Slow rotate */
+@keyframes rotate-slow {
+  to { transform: rotate(360deg); }
+}
+.animate-rotate-slow { animation: rotate-slow 30s linear infinite; }
+
+/* Section dividers — subtle gold lines */
+.section-divider {
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(200,169,81,0.0) 10%,
+    rgba(200,169,81,0.4) 50%,
+    rgba(200,169,81,0.0) 90%,
+    transparent 100%);
+}
+
+/* Pricing highlight pulse */
+@keyframes highlight-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(200,169,81,0.4), 0 8px 32px rgba(0,0,0,0.5); }
+  50%      { box-shadow: 0 0 24px 4px rgba(200,169,81,0.25), 0 12px 40px rgba(0,0,0,0.5); }
+}
+.animate-highlight { animation: highlight-pulse 3s ease-in-out infinite; }
+
+/* Marquee / scroll-x */
+@keyframes scroll-x {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.animate-scroll-x { animation: scroll-x 30s linear infinite; }

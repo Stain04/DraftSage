@@ -13,10 +13,11 @@ from supabase import create_client
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
 
-LS_API_KEY      = os.getenv("LEMONSQUEEZY_API_KEY", "")
-LS_STORE_ID     = os.getenv("LEMONSQUEEZY_STORE_ID", "")
-LS_VARIANT_ID   = os.getenv("LEMONSQUEEZY_VARIANT_ID", "")   # Pro plan variant
-WEBHOOK_SECRET  = os.getenv("LEMONSQUEEZY_WEBHOOK_SECRET", "")
+LS_API_KEY             = os.getenv("LEMONSQUEEZY_API_KEY", "")
+LS_STORE_ID            = os.getenv("LEMONSQUEEZY_STORE_ID", "")
+LS_VARIANT_ID          = os.getenv("LEMONSQUEEZY_VARIANT_ID", "")          # Pro monthly $9.99
+LS_VARIANT_ID_YEARLY   = os.getenv("LEMONSQUEEZY_VARIANT_ID_YEARLY", "")   # Pro yearly  $79
+WEBHOOK_SECRET         = os.getenv("LEMONSQUEEZY_WEBHOOK_SECRET", "")
 
 LS_API_BASE = "https://api.lemonsqueezy.com/v1"
 
@@ -43,6 +44,7 @@ def _get_supabase_admin():
 class CheckoutRequest(BaseModel):
     user_id: str
     email: str
+    billing_period: str = "monthly"   # "monthly" | "yearly"
 
 
 # ── Create Checkout ────────────────────────────────────────────────────────────
@@ -54,6 +56,18 @@ async def create_checkout_session(body: CheckoutRequest):
         raise HTTPException(status_code=503, detail="Lemon Squeezy not configured. Add LEMONSQUEEZY_API_KEY to backend/.env")
     if not LS_STORE_ID or not LS_VARIANT_ID:
         raise HTTPException(status_code=503, detail="Lemon Squeezy store/variant ID not configured.")
+
+    # Pick the right variant based on requested billing period
+    period_normalized = (body.billing_period or "monthly").lower()
+    if period_normalized == "yearly":
+        if not LS_VARIANT_ID_YEARLY:
+            raise HTTPException(
+                status_code=503,
+                detail="Yearly plan not yet available. Set LEMONSQUEEZY_VARIANT_ID_YEARLY in Railway.",
+            )
+        variant_id = LS_VARIANT_ID_YEARLY
+    else:
+        variant_id = LS_VARIANT_ID
 
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
@@ -68,13 +82,14 @@ async def create_checkout_session(body: CheckoutRequest):
                     "email": body.email,
                     # Pass both user_id and email — email is the fallback if custom_data is lost
                     "custom": {
-                        "user_id": body.user_id,
-                        "email":   body.email,
+                        "user_id":        body.user_id,
+                        "email":          body.email,
+                        "billing_period": period_normalized,
                     },
                 },
                 "product_options": {
                     "redirect_url": f"{frontend_url}/dashboard?upgraded=true",
-                    "enabled_variants": [str(LS_VARIANT_ID)],
+                    "enabled_variants": [str(variant_id)],
                 },
             },
             "relationships": {
@@ -82,7 +97,7 @@ async def create_checkout_session(body: CheckoutRequest):
                     "data": {"type": "stores", "id": str(LS_STORE_ID)}
                 },
                 "variant": {
-                    "data": {"type": "variants", "id": str(LS_VARIANT_ID)}
+                    "data": {"type": "variants", "id": str(variant_id)}
                 },
             },
         }
@@ -232,19 +247,39 @@ async def get_plans():
                 "cta": "Get Started",
             },
             {
-                "id": "pro",
+                "id": "pro_monthly",
                 "name": "Pro",
                 "price": 9.99,
+                "billing_period": "monthly",
                 "features": [
                     "Unlimited AI suggestions",
+                    "Team Composition Gap Analyzer",
+                    "Avoidance Intelligence (do-not-pick list)",
+                    "Confidence scoring + reasoning breakdown",
                     "Ban recommendations",
                     "Champion pool filtering",
                     "Patch tier indicators",
-                    "Draft history",
+                    "Cloud-synced draft history",
+                    "Priority AI model routing",
                     "Priority support",
                 ],
                 "cta": "Upgrade to Pro",
                 "highlighted": True,
+            },
+            {
+                "id": "pro_yearly",
+                "name": "Pro Yearly",
+                "price": 79,
+                "billing_period": "yearly",
+                "effective_monthly": 6.58,
+                "savings_pct": 34,
+                "features": [
+                    "Everything in Pro Monthly",
+                    "Save 34% vs monthly",
+                    "Early access to new features",
+                ],
+                "cta": "Go Yearly · Save 34%",
+                "best_value": True,
             },
         ]
     }
