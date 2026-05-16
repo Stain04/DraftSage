@@ -66,12 +66,15 @@ async def create_checkout_session(body: CheckoutRequest):
                 },
                 "checkout_data": {
                     "email": body.email,
+                    # Pass both user_id and email — email is the fallback if custom_data is lost
                     "custom": {
                         "user_id": body.user_id,
+                        "email":   body.email,
                     },
                 },
                 "product_options": {
                     "redirect_url": f"{frontend_url}/dashboard?upgraded=true",
+                    "enabled_variants": [str(LS_VARIANT_ID)],
                 },
             },
             "relationships": {
@@ -128,6 +131,37 @@ def _set_user_pro(user_id: str, is_pro: bool):
         print(f"[LemonSqueezy] ERROR updating user {user_id}: {e}")
 
 
+def _resolve_user_id(custom_data: dict, event: dict) -> str | None:
+    """
+    Get the Supabase user_id from the webhook payload.
+    Primary:  meta.custom_data.user_id  (attached at checkout creation)
+    Fallback: look up by email from the order/subscription attributes.
+    """
+    # Primary: user_id in custom_data
+    user_id = custom_data.get("user_id")
+    if user_id:
+        return user_id
+
+    # Fallback: match by email via Supabase admin API
+    email = (
+        custom_data.get("email")
+        or event.get("data", {}).get("attributes", {}).get("user_email")
+    )
+    if not email:
+        return None
+    try:
+        sb = _get_supabase_admin()
+        # list_users returns a paginated list — search by email
+        result = sb.auth.admin.list_users()
+        for u in result:
+            if hasattr(u, 'email') and u.email == email:
+                print(f"[LemonSqueezy] Resolved user_id by email: {email} → {u.id}")
+                return u.id
+    except Exception as e:
+        print(f"[LemonSqueezy] Email lookup failed: {e}")
+    return None
+
+
 @router.post("/webhook")
 async def lemonsqueezy_webhook(request: Request):
     payload_bytes = await request.body()
@@ -141,11 +175,11 @@ async def lemonsqueezy_webhook(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload.")
 
-    event_name = event.get("meta", {}).get("event_name", "")
-    custom_data = event.get("meta", {}).get("custom_data", {})
-    user_id = custom_data.get("user_id")
+    event_name  = event.get("meta", {}).get("event_name", "")
+    custom_data = event.get("meta", {}).get("custom_data") or {}
+    user_id     = _resolve_user_id(custom_data, event)
 
-    print(f"[LemonSqueezy] Event: {event_name} | user_id: {user_id}")
+    print(f"[LemonSqueezy] Event: {event_name} | user_id: {user_id} | custom_data: {custom_data}")
 
     # ── Subscription activated → grant Pro ────────────────────────────────────
     if event_name in ("subscription_created", "order_created"):
