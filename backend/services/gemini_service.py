@@ -84,6 +84,15 @@ STRICT RULES:
   - All reasoning must reference enemy/ally champions BY NAME.
   - If filling a gap and winning lane conflict, prioritize the GAP — explain trade-off.
 
+AVOID_CHAMPIONS RULES (the do-not-pick list shown to users):
+  - NEVER include a champion that is already in the draft (ally or enemy).
+    The user can see those — saying "don't pick X" when X is already picked
+    is noise that destroys trust in the tool.
+  - Only include champions the user could realistically pick but shouldn't,
+    because the enemy comp counters them, the damage profile would break,
+    or the lane matchup loses.
+  - 0-4 entries. If there's nothing meaningful to warn about, return [].
+
 OUTPUT — return ONLY valid JSON, zero extra text:
 {
   "recommendations": [
@@ -162,22 +171,43 @@ def _enrich_team_analysis(result: dict, analysis: dict, dmg: dict, enemy_dmg: di
     result.setdefault("composition_type", analysis["ally_archetype"])
 
 
-def _attach_deterministic_avoidance(result: dict, avoid_rules: list[dict]) -> None:
-    """Merge our deterministic avoid rules into result.avoid_champions."""
-    existing = result.get("avoid_champions") or []
-    if not isinstance(existing, list):
-        existing = []
+def _attach_deterministic_avoidance(
+    result: dict,
+    avoid_rules: list[dict],
+    drafted: set[str],
+) -> None:
+    """
+    Merge deterministic avoid rules into result.avoid_champions.
 
-    seen = {item.get("champion", "").lower() for item in existing if isinstance(item, dict)}
+    Also filters out any champion that is already in the draft — telling the
+    user "don't pick Aatrox" when Aatrox is on their team is just noise.
+    """
+    raw = result.get("avoid_champions") or []
+    if not isinstance(raw, list):
+        raw = []
 
-    # Add up to 6 champions from our rules, with the categorized reason
+    # Step 1 — drop any LLM-generated entries that reference drafted champions
+    existing: list[dict] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = (item.get("champion") or "").strip()
+        key  = name.lower()
+        if not key or key in drafted or key in seen:
+            continue
+        existing.append(item)
+        seen.add(key)
+
+    # Step 2 — append deterministic rules, also filtering drafted champions
     added = 0
     for rule in avoid_rules:
         for champ in rule["champions"]:
-            if champ.lower() in seen:
+            key = champ.lower()
+            if key in drafted or key in seen:
                 continue
             existing.append({"champion": champ, "reason": rule["reason"]})
-            seen.add(champ.lower())
+            seen.add(key)
             added += 1
             if added >= 6:
                 break
@@ -422,7 +452,8 @@ Return ONLY valid JSON, no extra text."""
     _enrich_team_analysis(result, analysis, dmg, enemy_dmg)
 
     # ── Attach deterministic avoidance rules ──────────────────────────────────
-    _attach_deterministic_avoidance(result, avoid_rules)
+    # Pass drafted set so already-picked champs are stripped from avoid_champions
+    _attach_deterministic_avoidance(result, avoid_rules, drafted_names)
 
     # ── Confidence scoring + back-compat field aliases ────────────────────────
     if result.get("recommendations"):
