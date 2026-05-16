@@ -12,6 +12,11 @@ const api = axios.create({
   timeout: 45000,
 });
 
+// Log resolved API URL once at startup so users can verify in DevTools
+// if their browser is hitting the right backend.
+// eslint-disable-next-line no-console
+console.info("[DraftSage] Engine endpoint:", BASE_URL);
+
 // Attach auth token if present
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("draftsage_token");
@@ -74,8 +79,19 @@ export const getSuggestions = async ({ allyPicks, enemyPicks, role, championPool
 /**
  * Pull a human-readable message out of an axios error.
  * Tries server-supplied detail first, then known patterns, falls back to a generic.
+ * Also logs the raw error to console so users / devs can diagnose.
  */
 export function describeApiError(err, fallback = "Something went wrong. Please try again.") {
+  // Always log so users hitting an issue can inspect in DevTools.
+  // eslint-disable-next-line no-console
+  console.error("[DraftSage] Engine request failed:", {
+    code:    err?.code,
+    message: err?.message,
+    status:  err?.response?.status,
+    detail:  err?.response?.data,
+    url:     err?.config?.baseURL + err?.config?.url,
+  });
+
   // Server-supplied detail (FastAPI HTTPException)
   const detail = err?.response?.data?.detail;
   if (typeof detail === "string" && detail.length > 0) return detail;
@@ -85,7 +101,7 @@ export function describeApiError(err, fallback = "Something went wrong. Please t
     return "The Engine took too long to respond. Try again — sometimes the patch-data source is slow.";
   }
   if (err?.code === "ERR_NETWORK" || !err?.response) {
-    return "Couldn't reach the Engine. Check your connection and try again.";
+    return "Couldn't reach the Engine. If you use an ad-blocker, allow draftsage-production.up.railway.app and reload.";
   }
   const s = err?.response?.status;
   if (s === 401) return "Please sign in again.";
