@@ -1,20 +1,26 @@
 import React, { useState, useEffect } from "react";
-import { Swords, Shield, Wand2, Crosshair, Users, Brain, RefreshCw, Lock, Ban, ChevronDown, ChevronUp, X, Bookmark } from "lucide-react";
+import {
+  Swords, Shield, Wand2, Crosshair, Users, Brain, RefreshCw,
+  Lock, Ban, ChevronDown, ChevronUp, X, Bookmark, Sparkles, Play,
+} from "lucide-react";
 import { toast } from "react-hot-toast";
 import ChampionSearch from "./ChampionSearch";
 import TeamSlot from "./TeamSlot";
-import RecommendationCard, { RecommendationSkeleton, WhyNotSection, TeamAnalysisPanel, AvoidChampionsSection } from "./RecommendationCard";
+import RecommendationCard, {
+  RecommendationSkeleton, WhyNotSection,
+  TeamAnalysisPanel, AvoidChampionsSection,
+} from "./RecommendationCard";
 import { getSuggestions } from "../api/geminiApi";
 import { fetchAllChampions } from "../api/riotApi";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../context/AuthContext";
 
 const ROLES = [
-  { id: "Top",     icon: <Swords size={16} />,     label: "Top" },
-  { id: "Jungle",  icon: <Shield size={16} />,      label: "Jungle" },
-  { id: "Mid",     icon: <Wand2 size={16} />,       label: "Mid" },
-  { id: "Bot",     icon: <Crosshair size={16} />,   label: "Bot" },
-  { id: "Support", icon: <Users size={16} />,       label: "Support" },
+  { id: "Top",     icon: <Swords    size={14} />, label: "Top"     },
+  { id: "Jungle",  icon: <Shield    size={14} />, label: "Jungle"  },
+  { id: "Mid",     icon: <Wand2     size={14} />, label: "Mid"     },
+  { id: "Bot",     icon: <Crosshair size={14} />, label: "Bot"     },
+  { id: "Support", icon: <Users     size={14} />, label: "Support" },
 ];
 
 const FREE_LIMIT = 3;
@@ -37,34 +43,34 @@ function incrementUsage() {
   return updated.count;
 }
 
+// ── Component ────────────────────────────────────────────────────────────────
+
 export default function DraftBoard() {
   const { isPro, isAdmin, user } = useAuth();
   const [champions, setChampions] = useState([]);
-  const [allyPicks, setAllyPicks]   = useState(ROLES.map((r) => ({ champion: null, role: r.id })));
+  const [allyPicks,  setAllyPicks]  = useState(ROLES.map((r) => ({ champion: null, role: r.id })));
   const [enemyPicks, setEnemyPicks] = useState(ROLES.map((r) => ({ champion: null, role: r.id })));
-  const [role, setRole] = useState("Mid");
-  const [banMode, setBanMode] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [role, setRole]         = useState("Mid");
+  const [banMode, setBanMode]   = useState(false);
+  const [loading, setLoading]   = useState(false);
   const [champLoading, setChampLoading] = useState(true);
-  const [result, setResult] = useState(null);
-  const [usage, setUsage] = useState(getDailyUsage());
+  const [result, setResult]     = useState(null);
+  const [usage, setUsage]       = useState(getDailyUsage());
 
-  // Champion pool state (Pro only)
+  // Champion pool (Pro)
   const [championPool, setChampionPool] = useState(() => {
     try { return JSON.parse(localStorage.getItem(POOL_KEY) || "[]"); } catch { return []; }
   });
   const [poolOpen, setPoolOpen] = useState(false);
 
-  // drag-and-drop state
+  // drag state
   const [dragIndex,      setDragIndex]      = useState(null);
   const [dragOverIndex,  setDragOverIndex]  = useState(null);
   const [eDragIndex,     setEDragIndex]     = useState(null);
   const [eDragOverIndex, setEDragOverIndex] = useState(null);
 
-  // Roles that already have an ally champion — cannot be selected
   const takenAllyRoles = new Set(allyPicks.filter((s) => s.champion).map((s) => s.role));
 
-  // Auto-switch role if current one gets taken
   useEffect(() => {
     if (takenAllyRoles.has(role)) {
       const next = ROLES.find((r) => !takenAllyRoles.has(r.id));
@@ -72,7 +78,7 @@ export default function DraftBoard() {
     }
   }, [allyPicks]); // eslint-disable-line
 
-  const isLocked = !isPro && !isAdmin && getDailyUsage().count >= FREE_LIMIT;
+  const isLocked  = !isPro && !isAdmin && getDailyUsage().count >= FREE_LIMIT;
   const usageLeft = FREE_LIMIT - usage.count;
 
   useEffect(() => {
@@ -82,7 +88,6 @@ export default function DraftBoard() {
       .finally(() => setChampLoading(false));
   }, []);
 
-  // Persist pool to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem(POOL_KEY, JSON.stringify(championPool));
   }, [championPool]);
@@ -93,7 +98,7 @@ export default function DraftBoard() {
   ];
   const poolExcludeIds = championPool.map((c) => c.id);
 
-  const addAlly  = (champ) => {
+  const addAlly = (champ) => {
     const slot = allyPicks.findIndex((s) => !s.champion);
     if (slot === -1) return toast.error("Ally team is full!");
     setAllyPicks((prev) => { const n = [...prev]; n[slot] = { ...n[slot], champion: champ }; return n; });
@@ -103,14 +108,11 @@ export default function DraftBoard() {
     if (slot === -1) return toast.error("Enemy team is full!");
     setEnemyPicks((prev) => { const n = [...prev]; n[slot] = { ...n[slot], champion: champ }; return n; });
   };
-  const removeAlly  = (i) => setAllyPicks((prev)  => { const n = [...prev]; n[i] = { ...n[i], champion: null }; return n; });
+  const removeAlly  = (i) => setAllyPicks ((prev) => { const n = [...prev]; n[i] = { ...n[i], champion: null }; return n; });
   const removeEnemy = (i) => setEnemyPicks((prev) => { const n = [...prev]; n[i] = { ...n[i], champion: null }; return n; });
 
-  const addToPool = (champ) => {
-    if (championPool.find((c) => c.id === champ.id)) return;
-    setChampionPool((prev) => [...prev, champ]);
-  };
-  const removeFromPool = (id) => setChampionPool((prev) => prev.filter((c) => c.id !== id));
+  const addToPool      = (champ) => { if (!championPool.find((c) => c.id === champ.id)) setChampionPool((prev) => [...prev, champ]); };
+  const removeFromPool = (id)    => setChampionPool((prev) => prev.filter((c) => c.id !== id));
 
   // Drag handlers — ally
   const handleDragStart = (e, i) => { setDragIndex(i); e.dataTransfer.effectAllowed = "move"; };
@@ -120,8 +122,8 @@ export default function DraftBoard() {
     setAllyPicks((prev) => {
       const n = [...prev];
       const dc = n[dragIndex].champion;
-      n[dragIndex]  = { ...n[dragIndex],  champion: n[t].champion };
-      n[t]          = { ...n[t],          champion: dc };
+      n[dragIndex] = { ...n[dragIndex], champion: n[t].champion };
+      n[t]         = { ...n[t],         champion: dc };
       return n;
     });
     setDragIndex(null); setDragOverIndex(null);
@@ -145,7 +147,7 @@ export default function DraftBoard() {
   const handleEDragEnd = () => { setEDragIndex(null); setEDragOverIndex(null); };
 
   const resetDraft = () => {
-    setAllyPicks(ROLES.map((r) => ({ champion: null, role: r.id })));
+    setAllyPicks(ROLES.map((r)  => ({ champion: null, role: r.id })));
     setEnemyPicks(ROLES.map((r) => ({ champion: null, role: r.id })));
     setResult(null);
   };
@@ -161,7 +163,7 @@ export default function DraftBoard() {
         enemy_picks: enemyPicks.filter((s) => s.champion).map((s) => `${s.champion.name} (${s.role})`),
         result:      draftResult,
       });
-    } catch { /* silent fail */ }
+    } catch { /* silent */ }
   };
 
   const handleSuggest = async () => {
@@ -171,9 +173,7 @@ export default function DraftBoard() {
     try {
       const allyNames  = allyPicks.filter((s) => s.champion).map((s) => `${s.champion.name} (${s.role})`);
       const enemyNames = enemyPicks.filter((s) => s.champion).map((s) => `${s.champion.name} (${s.role})`);
-      const pool       = (isPro || isAdmin) && championPool.length > 0
-        ? championPool.map((c) => c.name)
-        : null;
+      const pool       = (isPro || isAdmin) && championPool.length > 0 ? championPool.map((c) => c.name) : null;
 
       const data = await getSuggestions({
         allyPicks: allyNames,
@@ -190,6 +190,11 @@ export default function DraftBoard() {
         const newCount = incrementUsage();
         setUsage({ count: newCount, date: new Date().toDateString() });
       }
+
+      // Scroll to results
+      setTimeout(() => {
+        document.getElementById("engine-output")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 60);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Engine analysis failed. Please try again.");
     } finally {
@@ -197,249 +202,325 @@ export default function DraftBoard() {
     }
   };
 
-  return (
-    <div className="min-h-screen pt-20 pb-12 px-4">
-      <div className="max-w-7xl mx-auto">
+  // ── Render helpers ─────────────────────────────────────────────────────────
 
+  const renderTeamPanel = (side) => {
+    const picks   = side === "ally" ? allyPicks  : enemyPicks;
+    const isAlly  = side === "ally";
+    const onAdd   = isAlly ? addAlly  : addEnemy;
+    const onRem   = isAlly ? removeAlly : removeEnemy;
+    const dStart  = isAlly ? handleDragStart : handleEDragStart;
+    const dOver   = isAlly ? handleDragOver  : handleEDragOver;
+    const dDrop   = isAlly ? handleDrop      : handleEDrop;
+    const dEnd    = isAlly ? handleDragEnd   : handleEDragEnd;
+    const overIdx = isAlly ? dragOverIndex   : eDragOverIndex;
+    const dragIdx = isAlly ? dragIndex       : eDragIndex;
+
+    return (
+      <div className={`card-premium rounded-2xl p-4 sm:p-5 relative`}>
         {/* Header */}
-        <div className="text-center mb-8 animate-fade-in">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Brain size={24} className="text-gold" />
-            <h1 className="font-display text-3xl font-bold text-white">Draft Board</h1>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${isAlly ? "bg-blue-400 shadow-glow-blue" : "bg-red-400"}`} />
+            <h2 className={`font-display text-sm font-bold uppercase tracking-widest ${isAlly ? "text-blue-300" : "text-red-300"}`}>
+              {isAlly ? "Your Team" : "Enemy Team"}
+            </h2>
           </div>
-          <p className="text-navy-400 text-sm">
-            Add picks to both sides, select your role, and let the DraftSage Engine analyze the perfect pick.
-          </p>
-          {!isPro && !isAdmin && (
-            <p className={`mt-2 text-xs font-medium ${usageLeft <= 1 ? "text-red-400" : "text-navy-400"}`}>
-              {usageLeft > 0 ? `${usageLeft} free suggestions remaining today` : "Daily limit reached — upgrade to Pro"}
-            </p>
+          <span className={`text-[10px] font-mono uppercase tracking-wider ${isAlly ? "text-blue-400/60" : "text-red-400/60"}`}>
+            {picks.filter((p) => p.champion).length} / 5
+          </span>
+        </div>
+
+        {/* Search */}
+        <div className="mb-3">
+          {champLoading ? (
+            <div className="skeleton h-9 w-full rounded-lg" />
+          ) : (
+            <ChampionSearch
+              champions={champions}
+              onSelect={onAdd}
+              excludeIds={excludedIds}
+              placeholder={isAlly ? "Add ally champion…" : "Add enemy champion…"}
+            />
           )}
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* 5 horizontal slot cards */}
+        <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+          {picks.map((slot, i) => (
+            <TeamSlot
+              key={i}
+              index={i}
+              champion={slot.champion}
+              side={side}
+              onRemove={onRem}
+              role={slot.role}
+              onDragStart={dStart}
+              onDragOver={dOver}
+              onDrop={dDrop}
+              onDragEnd={dEnd}
+              isDragOver={overIdx === i && dragIdx !== i}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  };
 
-          {/* === ALLY TEAM === */}
-          <div className="card-gold rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-3 h-3 rounded-full bg-blue-400" />
-              <h2 className="font-semibold text-white">Ally Team</h2>
-              {!champLoading && champions.length > 0 && (
-                <span className="ml-auto text-xs text-navy-500">{champions.length} champs</span>
-              )}
-              {champLoading && <span className="ml-auto text-xs text-navy-600 animate-pulse">Loading...</span>}
-            </div>
+  // ── Render ────────────────────────────────────────────────────────────────
 
-            <div className="mb-4">
-              {champLoading ? (
-                <div className="skeleton h-10 w-full rounded-lg" />
-              ) : (
-                <ChampionSearch
-                  champions={champions}
-                  onSelect={addAlly}
-                  excludeIds={excludedIds}
-                  placeholder="Add ally champion..."
-                />
-              )}
-            </div>
+  return (
+    <div className="min-h-screen pt-24 pb-16 px-4 relative overflow-hidden">
 
-            <div className="space-y-2">
-              {allyPicks.map((slot, i) => (
-                <TeamSlot
-                  key={i} index={i} champion={slot.champion} side="ally"
-                  onRemove={removeAlly} role={slot.role}
-                  onDragStart={handleDragStart} onDragOver={handleDragOver}
-                  onDrop={handleDrop} onDragEnd={handleDragEnd}
-                  isDragOver={dragOverIndex === i && dragIndex !== i}
-                />
-              ))}
-            </div>
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-grid opacity-30 pointer-events-none" />
+      <div className="aurora-blob bg-gold/15 w-[500px] h-[500px] -top-20 left-1/4" />
+      <div className="aurora-blob bg-cyan/15 w-[450px] h-[450px] top-1/3 right-0" style={{ animationDelay: "3s" }} />
+
+      <div className="max-w-[1400px] mx-auto relative z-10">
+
+        {/* ── Page header ──────────────────────────────────────────── */}
+        <div className="flex items-end justify-between flex-wrap gap-3 mb-6 animate-fade-in">
+          <div>
+            <p className="text-[10px] sm:text-xs font-mono font-bold uppercase tracking-widest text-neon-cyan mb-1">
+              {"// DraftSage Engine v2"}
+            </p>
+            <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">Draft Board</h1>
           </div>
+          {!isPro && !isAdmin && (
+            <div className={`px-3 py-1.5 rounded-lg border text-xs font-medium font-mono uppercase tracking-wider
+              ${usageLeft <= 1
+                ? "border-magenta/50 bg-magenta/10 text-magenta"
+                : "border-navy-600 bg-navy-900/60 text-navy-300"}`}>
+              {usageLeft > 0
+                ? `${usageLeft} / ${FREE_LIMIT} Engine runs left today`
+                : "Daily limit reached — Upgrade to Pro"}
+            </div>
+          )}
+          {(isPro || isAdmin) && (
+            <div className="px-3 py-1.5 rounded-lg border border-gold/40 bg-gold/10 text-xs font-medium font-mono uppercase tracking-wider text-gold flex items-center gap-1.5">
+              <Sparkles size={12} /> Unlimited Engine
+            </div>
+          )}
+        </div>
 
-          {/* === CENTER === */}
-          <div className="flex flex-col gap-4">
+        {/* ── Action bar ──────────────────────────────────────────── */}
+        <div className="card-premium rounded-2xl p-3 sm:p-4 mb-5 relative animate-slide-up">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
 
-            {/* Champion Pool (Pro only) */}
-            <div className={`card rounded-2xl overflow-hidden transition-all ${!isPro && !isAdmin ? "opacity-60" : ""}`}>
+            {/* Mode toggle (Pick / Ban) */}
+            <div className="inline-flex items-center p-1 rounded-xl border border-navy-700 bg-navy-900/70">
               <button
-                onClick={() => (isPro || isAdmin) && setPoolOpen(!poolOpen)}
-                className="w-full flex items-center gap-2 p-4 text-sm font-semibold text-white hover:text-gold transition-colors"
+                onClick={() => setBanMode(false)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5
+                  ${!banMode
+                    ? "bg-gold-gradient text-navy-900 shadow-gold"
+                    : "text-navy-400 hover:text-white"}`}
               >
-                <Bookmark size={15} className="text-gold" />
-                My Champion Pool
+                <Brain size={13} /> Pick
+              </button>
+              <button
+                onClick={() => (isPro || isAdmin) ? setBanMode(true) : toast.error("Ban mode requires Pro!")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 relative
+                  ${banMode
+                    ? "bg-magenta text-white shadow-glow-mag"
+                    : "text-navy-400 hover:text-white"}`}
+              >
+                <Ban size={13} /> Ban
                 {!isPro && !isAdmin && (
-                  <span className="ml-auto text-xs text-gold border border-gold/30 px-2 py-0.5 rounded-full">Pro</span>
-                )}
-                {(isPro || isAdmin) && (
-                  <>
-                    <span className="ml-auto text-xs text-navy-400">
-                      {championPool.length > 0 ? `${championPool.length} champs` : "All champs"}
-                    </span>
-                    {poolOpen ? <ChevronUp size={14} className="text-navy-400" /> : <ChevronDown size={14} className="text-navy-400" />}
-                  </>
+                  <Lock size={9} className="text-gold ml-0.5" />
                 )}
               </button>
-
-              {poolOpen && (isPro || isAdmin) && (
-                <div className="px-4 pb-4 space-y-3 border-t border-navy-700 pt-3">
-                  <ChampionSearch
-                    champions={champions}
-                    onSelect={addToPool}
-                    excludeIds={poolExcludeIds}
-                    placeholder="Add to your pool..."
-                  />
-                  {championPool.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {championPool.map((c) => (
-                        <div
-                          key={c.id}
-                          className="flex items-center gap-1.5 bg-navy-800 border border-navy-600 rounded-lg px-2 py-1 text-xs text-white"
-                        >
-                          <img
-                            src={`https://ddragon.leagueoflegends.com/cdn/15.1.1/img/champion/${c.id}.png`}
-                            alt={c.name}
-                            className="w-4 h-4 rounded"
-                          />
-                          {c.name}
-                          <button onClick={() => removeFromPool(c.id)} className="text-navy-400 hover:text-red-400 transition-colors">
-                            <X size={10} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-navy-500 text-center py-2">
-                      No pool set — Engine will suggest any champion
-                    </p>
-                  )}
-                </div>
-              )}
             </div>
 
-            {/* Mode Toggle: Pick / Ban */}
-            <div className="card rounded-2xl p-4">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setBanMode(false)}
-                  className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all
-                    ${!banMode
-                      ? "border-gold bg-gold/10 text-gold border shadow-gold"
-                      : "border border-navy-600 text-navy-400 hover:border-navy-400 hover:text-white"
-                    }`}
-                >
-                  <Brain size={15} /> Pick Mode
-                </button>
-                <button
-                  onClick={() => (isPro || isAdmin) ? setBanMode(true) : toast.error("Ban recommendations require Pro!")}
-                  className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all relative
-                    ${banMode
-                      ? "border-red-500 bg-red-500/10 text-red-400 border"
-                      : "border border-navy-600 text-navy-400 hover:border-navy-400 hover:text-white"
-                    }`}
-                >
-                  <Ban size={15} /> Ban Mode
-                  {!isPro && !isAdmin && (
-                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-gold flex items-center justify-center">
-                      <Lock size={8} className="text-navy-900" />
+            {/* Vertical divider */}
+            <div className="hidden md:block h-7 w-px bg-navy-700" />
+
+            {/* Role pills */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-navy-400 mr-1 hidden sm:inline">
+                Role:
+              </span>
+              {ROLES.map((r) => {
+                const isTaken    = takenAllyRoles.has(r.id);
+                const isSelected = role === r.id;
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => !isTaken && setRole(r.id)}
+                    disabled={isTaken}
+                    title={isTaken ? `${r.label} is already picked` : r.label}
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-lg border text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 relative
+                      ${isTaken
+                        ? "border-navy-800 bg-navy-900/30 text-navy-700 cursor-not-allowed"
+                        : isSelected
+                        ? "border-cyan/60 bg-cyan/10 text-cyan shadow-glow-cyan"
+                        : "border-navy-700 text-navy-300 hover:border-navy-500 hover:text-white"}`}
+                  >
+                    {isTaken ? <Lock size={11} /> : r.icon}
+                    <span className="hidden sm:inline">{r.label}</span>
+                    <span className="sm:hidden">{r.label.slice(0, 3)}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Spacer to push right cluster to the end */}
+            <div className="flex-1 min-w-0" />
+
+            {/* Champion pool button (Pro) */}
+            <button
+              onClick={() => (isPro || isAdmin) ? setPoolOpen(!poolOpen) : toast.error("Champion pool is a Pro feature!")}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5
+                ${poolOpen
+                  ? "border-gold/60 bg-gold/10 text-gold"
+                  : "border-navy-700 bg-navy-900/60 text-navy-300 hover:border-navy-500 hover:text-white"}`}
+            >
+              <Bookmark size={13} />
+              <span>Pool</span>
+              {!isPro && !isAdmin
+                ? <Lock size={10} className="text-gold ml-0.5" />
+                : championPool.length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gold/20 text-gold font-bold">
+                      {championPool.length}
                     </span>
                   )}
-                </button>
-              </div>
-            </div>
+              {(isPro || isAdmin) && (poolOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />)}
+            </button>
 
-            {/* Role Selector */}
-            <div className="card rounded-2xl p-5">
-              <h2 className="font-semibold text-white mb-3 text-center">
-                {banMode ? "Focus Role" : "Your Role"}
-              </h2>
-              <div className="grid grid-cols-5 gap-2">
-                {ROLES.map((r) => {
-                  const isTaken    = takenAllyRoles.has(r.id);
-                  const isSelected = role === r.id;
-                  return (
-                    <button
-                      key={r.id}
-                      onClick={() => !isTaken && setRole(r.id)}
-                      disabled={isTaken}
-                      title={isTaken ? `${r.label} is already picked` : r.label}
-                      className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-all text-xs font-medium relative
-                        ${isTaken
-                          ? "border-navy-700 bg-navy-800/40 text-navy-600 cursor-not-allowed opacity-50"
-                          : isSelected
-                          ? "border-gold bg-gold/10 text-gold shadow-gold animate-pulse-gold"
-                          : "border-navy-600 text-navy-400 hover:border-navy-400 hover:text-white"
-                        }`}
-                    >
-                      {isTaken ? <Lock size={14} /> : r.icon}
-                      <span>{r.label}</span>
-                      {isTaken && (
-                        <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-navy-700 border border-navy-500 flex items-center justify-center">
-                          <Lock size={8} className="text-navy-400" />
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Get Suggestion Button */}
+            {/* Run Engine — primary CTA */}
             <button
               onClick={handleSuggest}
               disabled={loading || isLocked}
-              className={`w-full py-4 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-3
+              className={`px-5 py-2 rounded-lg font-bold text-sm uppercase tracking-wider transition-all flex items-center gap-2 whitespace-nowrap
                 ${isLocked
                   ? "bg-navy-700 border border-navy-600 text-navy-500 cursor-not-allowed"
                   : loading
-                  ? "bg-navy-700 border border-gold/20 text-gold cursor-wait"
-                  : banMode
-                  ? "bg-red-500/20 border border-red-500/50 text-red-400 hover:bg-red-500/30"
-                  : "btn-gold shadow-gold"
-                }`}
+                  ? "bg-navy-700 border border-cyan/30 text-cyan cursor-wait"
+                  : "btn-esports shadow-glow-cyan"}`}
             >
               {isLocked ? (
-                <><Lock size={20} /> Upgrade to Pro</>
+                <><Lock size={14} /> Upgrade</>
               ) : loading ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-gold border-t-transparent rounded-full animate-spin" />
-                  {banMode ? "Analyzing Bans..." : "Analyzing Draft..."}
+                  <div className="w-3.5 h-3.5 border-2 border-cyan border-t-transparent rounded-full animate-spin" />
+                  Analyzing
                 </>
               ) : (
-                <>{banMode ? <><Ban size={20} /> Get Ban Recommendations</> : <><Brain size={20} /> Run DraftSage Engine</>}</>
+                <><Play size={14} fill="currentColor" /> Run Engine</>
               )}
             </button>
 
-            {/* Reset */}
+            {/* Reset (icon-only) */}
             <button
               onClick={resetDraft}
-              className="w-full py-2.5 rounded-xl border border-navy-600 text-navy-400 hover:border-navy-400 hover:text-white transition-all flex items-center justify-center gap-2 text-sm"
+              aria-label="Reset draft"
+              title="Reset draft"
+              className="w-9 h-9 rounded-lg border border-navy-700 bg-navy-900/60 text-navy-400 hover:border-navy-500 hover:text-white transition-all flex items-center justify-center"
             >
-              <RefreshCw size={14} /> Reset Draft
+              <RefreshCw size={14} />
             </button>
+          </div>
 
-            {/* Loading skeleton */}
-            {loading && (
-              <div className="space-y-3 mt-2">
+          {/* Champion pool — collapsible panel inside action bar */}
+          {poolOpen && (isPro || isAdmin) && (
+            <div className="mt-3 pt-3 border-t border-navy-700 animate-fade-in">
+              <ChampionSearch
+                champions={champions}
+                onSelect={addToPool}
+                excludeIds={poolExcludeIds}
+                placeholder="Add a champion to your pool…"
+              />
+              {championPool.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {championPool.map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center gap-1.5 bg-navy-800 border border-navy-700 rounded-md px-1.5 py-1 text-xs text-white"
+                    >
+                      <img
+                        src={`https://ddragon.leagueoflegends.com/cdn/15.1.1/img/champion/${c.id}.png`}
+                        alt={c.name}
+                        className="w-5 h-5 rounded"
+                      />
+                      {c.name}
+                      <button
+                        onClick={() => removeFromPool(c.id)}
+                        className="text-navy-500 hover:text-magenta transition-colors"
+                        aria-label={`Remove ${c.name} from pool`}
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-navy-500 text-center py-3 italic">
+                  No pool set — Engine will suggest from all champions.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Two-team layout ─────────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-6">
+          <div className="animate-slide-up" style={{ animationDelay: "0.05s" }}>
+            {renderTeamPanel("ally")}
+          </div>
+          <div className="animate-slide-up" style={{ animationDelay: "0.1s" }}>
+            {renderTeamPanel("enemy")}
+          </div>
+        </div>
+
+        {/* ── Engine output ──────────────────────────────────────── */}
+        <div id="engine-output">
+          {loading && (
+            <div className="card-premium rounded-2xl p-5 sm:p-6 animate-slide-up">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-4 h-4 border-2 border-cyan border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm font-mono font-bold uppercase tracking-widest text-neon-cyan">
+                  {"// Engine analyzing draft…"}
+                </p>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <RecommendationSkeleton />
                 <RecommendationSkeleton />
                 <RecommendationSkeleton />
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Results */}
-            {result && !loading && (
-              <div className="space-y-3 animate-slide-up">
-                <div className="flex items-center gap-2 py-2">
-                  <div className="divider-gold flex-1" />
-                  <span className="text-xs text-gold font-semibold uppercase tracking-widest">
-                    {banMode ? "Ban Recommendations" : "Engine Recommendations"}
-                  </span>
-                  <div className="divider-gold flex-1" />
-                </div>
-                <TeamAnalysisPanel teamAnalysis={result.team_analysis} />
+          {result && !loading && (
+            <div className="space-y-5 animate-slide-up">
+
+              {/* Output header strip */}
+              <div className="flex items-center gap-3 px-1">
+                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan/40 to-transparent" />
+                <span className="text-[11px] sm:text-xs text-neon-cyan font-bold uppercase tracking-widest font-mono whitespace-nowrap">
+                  {banMode ? "// Ban Recommendations" : "// Engine Recommendations"}
+                </span>
+                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan/40 to-transparent" />
+              </div>
+
+              {/* Team analysis (full-width) */}
+              <TeamAnalysisPanel teamAnalysis={result.team_analysis} />
+
+              {/* Recommendations — 3-column grid on desktop, 1-col on mobile */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {result.recommendations?.map((rec, i) => (
-                  <RecommendationCard key={rec.champion} rec={rec} rank={i} isTopPick={i === 0} banMode={banMode} />
+                  <RecommendationCard
+                    key={rec.champion}
+                    rec={rec}
+                    rank={i}
+                    isTopPick={i === 0}
+                    banMode={banMode}
+                  />
                 ))}
+              </div>
+
+              {/* Avoid + Why Not — 2-column on large screens */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <AvoidChampionsSection avoidChampions={result.avoid_champions} />
                 <WhyNotSection
                   whyNot={result.why_not}
@@ -451,41 +532,21 @@ export default function DraftBoard() {
                   draftGradeReason={result.draft_grade_reason}
                 />
               </div>
-            )}
-          </div>
-
-          {/* === ENEMY TEAM === */}
-          <div className="card-gold rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-3 h-3 rounded-full bg-red-400" />
-              <h2 className="font-semibold text-white">Enemy Team</h2>
             </div>
+          )}
 
-            <div className="mb-4">
-              {champLoading ? (
-                <div className="skeleton h-10 w-full rounded-lg" />
-              ) : (
-                <ChampionSearch
-                  champions={champions}
-                  onSelect={addEnemy}
-                  excludeIds={excludedIds}
-                  placeholder="Add enemy champion..."
-                />
-              )}
+          {/* Empty state — only show when no result and not loading */}
+          {!result && !loading && (
+            <div className="card rounded-2xl p-8 text-center border-dashed border-navy-700">
+              <Brain size={36} className="text-navy-600 mx-auto mb-3" />
+              <p className="text-sm text-navy-400 mb-1">
+                Add picks to both sides, choose your role, then run the Engine.
+              </p>
+              <p className="text-xs text-navy-600 font-mono uppercase tracking-wider">
+                {"// awaiting input"}
+              </p>
             </div>
-
-            <div className="space-y-2">
-              {enemyPicks.map((slot, i) => (
-                <TeamSlot
-                  key={i} index={i} champion={slot.champion} side="enemy"
-                  onRemove={removeEnemy} role={slot.role}
-                  onDragStart={handleEDragStart} onDragOver={handleEDragOver}
-                  onDrop={handleEDrop} onDragEnd={handleEDragEnd}
-                  isDragOver={eDragOverIndex === i && eDragIndex !== i}
-                />
-              ))}
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
