@@ -23,6 +23,7 @@ from .lolalytics_service       import fetch_all_context, build_lolalytics_contex
 from .champion_types           import analyze_team_damage
 from .composition_analyzer     import analyze_comp, build_intelligence_block
 from .avoidance_engine         import derive_avoidance, build_avoidance_block, build_avoid_set
+from .summoner_spells          import get_summoner_spells
 
 # ── API Keys (pool for rotation) ─────────────────────────────────────────────
 API_KEYS: list[str] = []
@@ -455,7 +456,7 @@ Return ONLY valid JSON, no extra text."""
     # Pass drafted set so already-picked champs are stripped from avoid_champions
     _attach_deterministic_avoidance(result, avoid_rules, drafted_names)
 
-    # ── Confidence scoring + back-compat field aliases ────────────────────────
+    # ── Confidence scoring + back-compat field aliases + spell override ──────
     if result.get("recommendations"):
         for rec in result["recommendations"]:
             _compute_confidence(rec)
@@ -464,6 +465,13 @@ Return ONLY valid JSON, no extra text."""
                 rec["analysis"] = rec["reason"]
             if "synergizes_with" not in rec and rec.get("synergies"):
                 rec["synergizes_with"] = rec["synergies"]
+            # LLMs hallucinate summoner spells (Smite on ADCs, Ignite on every-
+            # one). Always overwrite with the deterministic recommendation.
+            rec["summoner_spells"] = get_summoner_spells(
+                champion=rec.get("champion", ""),
+                role=role,
+                enemy_picks=enemy_picks,
+            )
 
     # ── Patch tier badges (existing OP.GG integration) ────────────────────────
     if tier_list_ref and result.get("recommendations"):
