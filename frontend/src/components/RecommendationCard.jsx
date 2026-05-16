@@ -101,12 +101,34 @@ export default function RecommendationCard({ rec, rank, isTopPick = false, banMo
             {/* Fills gap */}
             {rec.fills_gap && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
-                ✦ {rec.fills_gap}
+                ✦ Fills {rec.fills_gap}
+              </span>
+            )}
+            {/* Answers threat */}
+            {rec.answers_threat && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-300 border border-red-500/25">
+                ⚔ Counters {rec.answers_threat}
               </span>
             )}
           </div>
         </div>
       </div>
+
+      {/* ── Confidence meter ── */}
+      {rec.score_breakdown?.confidence != null && (
+        <div className="mb-3">
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="text-navy-400 font-medium uppercase tracking-wider">Confidence</span>
+            <span className="text-gold font-bold">{rec.score_breakdown.confidence}%</span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-navy-800 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-gold to-emerald-400"
+              style={{ width: `${Math.min(100, Math.max(0, rec.score_breakdown.confidence))}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="divider-gold mb-4" />
 
@@ -167,6 +189,32 @@ export default function RecommendationCard({ rec, rank, isTopPick = false, banMo
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Score Breakdown (compact, always visible if available) ── */}
+      {rec.score_breakdown && (rec.score_breakdown.lane != null || rec.score_breakdown.team_fit != null) && (
+        <div className="grid grid-cols-4 gap-1.5 mb-3">
+          {[
+            { key: "lane",          label: "Lane",   max: 40, color: "bg-blue-500"    },
+            { key: "team_fit",      label: "Fit",    max: 25, color: "bg-emerald-500" },
+            { key: "threat_answer", label: "Threat", max: 20, color: "bg-red-500"     },
+            { key: "meta",          label: "Meta",   max: 15, color: "bg-purple-500"  },
+          ].map(({ key, label, max, color }) => {
+            const val = Number(rec.score_breakdown[key] ?? 0);
+            const pct = Math.min(100, (val / max) * 100);
+            return (
+              <div key={key} className="p-1.5 rounded-md bg-navy-900/60 border border-navy-700">
+                <div className="flex items-baseline justify-between mb-0.5">
+                  <span className="text-[10px] text-navy-400 uppercase tracking-wider">{label}</span>
+                  <span className="text-[11px] text-white font-semibold">{val}<span className="text-navy-500">/{max}</span></span>
+                </div>
+                <div className="h-1 w-full rounded-full bg-navy-800 overflow-hidden">
+                  <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -233,17 +281,26 @@ export function RecommendationSkeleton() {
 
 export function TeamAnalysisPanel({ teamAnalysis }) {
   if (!teamAnalysis) return null;
+  const allyArch  = teamAnalysis.ally_archetype;
+  const enemyArch = teamAnalysis.enemy_archetype;
   return (
     <div className="card rounded-2xl p-4 border border-blue-500/20 animate-fade-in">
       <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-3">🔍 Draft Analysis</p>
+      {/* Damage + Archetype row */}
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="p-2.5 rounded-lg bg-navy-900/60 border border-navy-700">
-          <p className="text-xs text-navy-400 mb-1">Your team damage</p>
+          <p className="text-xs text-navy-400 mb-1">Your team</p>
           <p className="text-sm font-semibold text-white">{teamAnalysis.ally_damage_type || "—"}</p>
+          {allyArch && (
+            <p className="text-[11px] text-blue-300 mt-0.5 capitalize">{COMP_ICONS[allyArch] || "⚡"} {allyArch}</p>
+          )}
         </div>
         <div className="p-2.5 rounded-lg bg-navy-900/60 border border-navy-700">
-          <p className="text-xs text-navy-400 mb-1">Enemy damage</p>
+          <p className="text-xs text-navy-400 mb-1">Enemy team</p>
           <p className="text-sm font-semibold text-white">{teamAnalysis.enemy_damage_type || "—"}</p>
+          {enemyArch && (
+            <p className="text-[11px] text-red-300 mt-0.5 capitalize">{COMP_ICONS[enemyArch] || "⚡"} {enemyArch}</p>
+          )}
         </div>
       </div>
       {teamAnalysis.missing_from_ally?.length > 0 && (
@@ -262,6 +319,45 @@ export function TeamAnalysisPanel({ teamAnalysis }) {
           <p className="text-xs text-red-200">{teamAnalysis.enemy_win_condition}</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── AvoidChampionsSection ─────────────────────────────────────────────────────
+// Renders the deterministic + AI-derived "do not pick" list with reasons.
+
+export function AvoidChampionsSection({ avoidChampions }) {
+  if (!avoidChampions?.length) return null;
+
+  // Group by reason to avoid repetition (deterministic rules share reasons)
+  const groups = new Map();
+  for (const item of avoidChampions) {
+    if (!item?.champion) continue;
+    const key = item.reason || "Bad fit vs this comp";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item.champion);
+  }
+
+  return (
+    <div className="card rounded-2xl p-5 border border-red-500/25 animate-slide-up">
+      <div className="flex items-center gap-2 mb-3">
+        <AlertTriangle size={14} className="text-red-400" />
+        <span className="text-xs font-semibold text-red-400 uppercase tracking-wider">Do Not Pick</span>
+      </div>
+      <div className="space-y-2.5">
+        {Array.from(groups.entries()).map(([reason, champs], idx) => (
+          <div key={idx} className="p-2.5 rounded-lg bg-red-900/10 border border-red-500/15">
+            <div className="flex flex-wrap gap-1 mb-1.5">
+              {champs.map((c) => (
+                <span key={c} className="px-2 py-0.5 text-xs rounded bg-red-500/15 text-red-200 border border-red-500/25 font-medium">
+                  {c}
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-navy-300 leading-relaxed">{reason}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

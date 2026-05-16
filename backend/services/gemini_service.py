@@ -1,13 +1,28 @@
+"""
+DraftSage AI Brain v2.
+
+Three-stage pipeline before the LLM ever sees the request:
+  1. Deterministic team composition analysis  (composition_analyzer)
+  2. Live lane counter data from Lolalytics    (lolalytics_service)
+  3. Avoidance engine — comp-level "don't pick" (avoidance_engine)
+
+The LLM receives all of this as structured intelligence and is required to:
+  • Fill identified ally gaps
+  • Counter identified enemy threats
+  • Stay out of both the lane blacklist AND the comp-level avoid list
+  • Return per-recommendation score breakdowns so users see *why*
+"""
+
 import json
 import os
-import asyncio
 import re
-from typing import Optional
 
 from groq import AsyncGroq
 
-from .lolalytics_service import fetch_all_context, build_lolalytics_context
-from .champion_types import analyze_team_damage
+from .lolalytics_service       import fetch_all_context, build_lolalytics_context
+from .champion_types           import analyze_team_damage
+from .composition_analyzer     import analyze_comp, build_intelligence_block
+from .avoidance_engine         import derive_avoidance, build_avoidance_block, build_avoid_set
 
 # ── API Keys (pool for rotation) ─────────────────────────────────────────────
 API_KEYS: list[str] = []
@@ -19,111 +34,207 @@ for i in range(1, 11):
 
 # ── Model fallback chain ──────────────────────────────────────────────────────
 MODELS = [
-    "llama-3.3-70b-versatile",  # Best quality
-    "llama3-70b-8192",          # Fallback (stable, high quality)
-    "llama-3.1-8b-instant",     # Last resort — very high rate limits
+    "llama-3.3-70b-versatile",
+    "llama3-70b-8192",
+    "llama-3.1-8b-instant",
 ]
 
 # ── System prompt ─────────────────────────────────────────────────────────────
-SYSTEM_PROMPT = """You are a Challenger-level League of Legends draft analyst with deep knowledge of high-elo gameplay, meta trends, and competitive drafting.
+SYSTEM_PROMPT = """You are DraftSage — a Challenger-level League of Legends draft analyst.
 
-When analyzing a draft, think through these layers IN ORDER before producing output:
+You receive THREE layers of pre-computed intelligence in every user message:
+  A. DAMAGE BALANCE RULE   — deterministic AP/AD enforcement
+  B. TEAM COMPOSITION INTEL — gaps in ally comp, enemy archetype, enemy threats
+  C. LOLALYTICS DATA       — verified lane-counter pool + lane blacklist
+  D. AVOIDANCE INTEL       — comp-level "do not pick" rules with reasons
 
-LAYER 1 - IDENTIFY WIN CONDITIONS
-- What is the enemy team trying to do to win? (hard engage, poke to death, splitpush pressure, teamfight, pick comp, protect-the-carry)
-- What win condition does our team currently have based on picks so far?
-- What win condition does the role we're filling need to provide or reinforce?
+You MUST treat these layers as authoritative ground truth. Your job is NOT to
+guess matchups from memory — it is to synthesize the structured intelligence
+into a great pick that:
 
-LAYER 2 - COMPOSITION ANALYSIS
-- AP/AD balance: Never go full AD or full AP. If ally team is full AD, ONLY suggest AP picks. If full AP, ONLY suggest AD picks.
-- Frontline vs backline: Do we have engage? Do we have peel for our carries?
-- Early/mid/late game power curve: Are we strong enough early to survive until our win condition kicks in?
-- Objective control: Baron, Dragon, Herald priority based on comp strengths.
-- Wave management: Do we have enough push/freeze options?
+  1. Fills the TOP CRITICAL GAP in the ally comp (from B).
+  2. Counters at least one of the HIGH-severity enemy threats (from B).
+  3. Wins the lane matchup (in the LOLALYTICS counter pool from C).
+  4. Is NOT in any blacklist (lane blacklist from C, avoidance list from D).
+  5. Respects the AP/AD damage rule (from A).
 
-LAYER 3 - COUNTER PICK LOGIC (DATA-FIRST APPROACH)
-The LIVE LOLALYTICS DATA block in the user message contains real win-rate verified counters and a blacklist.
-You MUST follow this priority order:
+REASONING ORDER (think through silently, then output ONLY JSON):
 
-STEP 1 — Start from the lolalytics ✅ GOOD INTO list for the lane opponent.
-  These are champions that statistically WIN the 1v1 matchup on the current patch.
-  This is your primary candidate pool. Do NOT ignore it.
-
-STEP 2 — Cross-reference with the ⛔ DO NOT PICK list.
-  Any champion listed there LOSES the 1v1. They are forbidden regardless of any other reason.
-  Your "knowledge" about kits or synergies does NOT override a verified losing matchup.
-
-STEP 3 — Apply filters: AP/AD balance, synergy, already picked.
-  From the verified counter pool, pick those that also fit the comp.
-  Only if the counter pool is empty after filtering may you suggest outside it, with explicit justification.
-
-STEP 4 — Confirm meta viability via the tier list.
-  Champions not on the current patch tier list need a strong justification.
-
-LAYER 4 - SYNERGY ANALYSIS
-- Which pick amplifies existing ally win conditions?
-- Specific combos to consider: knock-up synergies (Yasuo/Yone), engage chains (follow-up CC), healing amplification, peel combinations.
-- Does this pick enable a combo play with existing allies that the enemy cannot easily stop?
-
-LAYER 5 - META RELEVANCE
-- Is this champion strong in the current patch?
-- Is this champion a flex pick creating draft pressure?
-- Does it have a good matchup spread or is it highly situational?
-
-LAYER 6 - PRACTICAL CONSIDERATIONS
-- Difficulty vs payoff: Is the skill ceiling worth the reward in this specific game state?
-- Optimal summoner spells for this matchup.
-- First item power spike timing relative to the game state.
-- When exactly should this team be fighting/winning?
+  Step 1 — Read the ally gaps. What axes does the next pick MUST address?
+  Step 2 — Read the enemy threats. What does the next pick MUST counter?
+  Step 3 — Filter the lane-counter pool by:
+            (a) damage rule (forbidden_type)
+            (b) avoidance rules (do not pick these)
+            (c) what fills the gap from Step 1
+  Step 4 — From the filtered pool, pick 3 with DIFFERENT playstyles.
+  Step 5 — For each pick, compute score_breakdown:
+            lane (40)        — how strong the lane matchup is (0-40)
+            team_fit (25)    — how well it fills the ally gaps (0-25)
+            threat_answer(20)— how well it counters enemy threats (0-20)
+            meta (15)        — current patch tier (0-15)
+            Sum gives confidence (0-100).
+  Step 6 — Write tight reasoning that names specific ally + enemy champions.
 
 STRICT RULES:
-- The 3 recommendations MUST be from different champion archetypes/playstyles. Never suggest 3 of the same class.
-- NEVER recommend a champion that is already picked by either team — they are locked out of the draft.
-- NEVER recommend a champion from the ⛔ DO NOT PICK list — those champions LOSE the lane matchup on real patch data.
-- NEVER use your internal training "knowledge" to override the lolalytics win-rate data. Real data beats intuition.
-- A real counter requires at least a 3% statistical edge. A 50-51% win rate is noise, not a counter.
-- Always reference the SPECIFIC enemy and ally champions by name in your reasoning — no generic analysis.
-- If a champion pool is provided, ONLY recommend from that pool.
+  - Never recommend a champion already in the draft.
+  - Never recommend a champion in the lane blacklist (loses lane on real data).
+  - Never recommend a champion in the avoidance list (loses comp-level).
+  - Never recommend the FORBIDDEN damage type.
+  - The 3 recommendations MUST be different archetypes.
+  - All reasoning must reference enemy/ally champions BY NAME.
+  - If filling a gap and winning lane conflict, prioritize the GAP — explain trade-off.
 
-OUTPUT FORMAT — Return ONLY valid JSON, zero extra text:
+OUTPUT — return ONLY valid JSON, zero extra text:
 {
   "recommendations": [
     {
       "champion": "ChampionName",
       "difficulty": "Easy|Medium|Hard",
       "damage_type": "AD|AP|Mixed|True",
-      "archetype": "Mage|Assassin|Tank|Fighter|Marksman|Support|etc",
-      "analysis": "2-3 sentences: why this champion is the best pick for this specific draft",
-      "win_condition": "1-2 sentences: exactly how this champion wins the game given the current state",
-      "synergizes_with": ["AllyName1", "AllyName2"],
+      "archetype": "Mage|Assassin|Tank|Fighter|Marksman|Support|Enchanter|Bruiser",
+      "reason": "2-3 sentences explaining WHY this pick — reference ally + enemy champions by name",
+      "win_condition": "1-2 sentences: exactly how this champion wins the game",
+      "fills_gap": "The ally-comp gap this fixes (e.g. 'Engage', 'Frontline'). Empty string if none.",
+      "answers_threat": "Which enemy threat this counters (e.g. 'Heavy dive'). Empty string if none.",
+      "synergies": ["AllyName1", "AllyName2"],
       "counters": ["EnemyName1"],
       "summoner_spells": ["Flash", "Ignite"],
       "first_item": "ItemName",
-      "power_spike": "early|mid|late"
+      "power_spike": "early|mid|late",
+      "early_game_plan": "1 sentence: how to play the laning phase",
+      "team_fighting_role": "1 sentence: your job in teamfights",
+      "score_breakdown": {
+        "lane": 0-40,
+        "team_fit": 0-25,
+        "threat_answer": 0-20,
+        "meta": 0-15,
+        "confidence": 0-100
+      }
     }
   ],
   "team_analysis": {
-    "composition_type": "engage|poke|teamfight|splitpush|pick|protect",
-    "damage_split": "AP-heavy|AD-heavy|balanced",
-    "win_window": "early|mid|late|scaling",
-    "key_synergies": ["Synergy1", "Synergy2"],
-    "weaknesses": ["Weakness1"]
+    "ally_damage_type": "AP-heavy|AD-heavy|Balanced",
+    "enemy_damage_type": "AP-heavy|AD-heavy|Balanced",
+    "ally_archetype": "engage|poke|pick|splitpush|teamfight|dive|scaling|protect|balanced",
+    "enemy_archetype": "engage|poke|pick|splitpush|teamfight|dive|scaling|protect|balanced",
+    "missing_from_ally": ["Gap1", "Gap2"],
+    "enemy_win_condition": "1 sentence: how the enemy wins if you don't adapt"
   },
-  "why_not": "Brief explanation of what archetypes or picks to avoid and why",
-  "team_win_condition": "The specific sequence of events that leads to victory",
-  "composition_type": "teamfight|poke|engage|splitpush|pick|protect-the-carry",
+  "avoid_champions": [
+    {"champion": "Name", "reason": "Why this specific champion is bad here"}
+  ],
+  "key_threats": ["EnemyName1", "EnemyName2"],
+  "team_win_condition": "Your team's path to victory given the chosen pick",
+  "composition_type": "engage|poke|teamfight|splitpush|pick|protect|dive|scaling|balanced",
   "power_curve": "early|mid|late|scaling",
-  "key_threats": ["Threat1", "Threat2"],
   "draft_grade": "A|B|C",
-  "draft_grade_reason": "Brief reason for the grade"
+  "draft_grade_reason": "Brief: why this grade",
+  "why_not": "Brief summary of which archetypes to avoid and why (1-2 sentences)"
 }"""
 
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _format_team(picks: list[str]) -> str:
     if not picks:
         return "  (none yet)"
     return "\n".join(f"  - {p}" for p in picks)
 
+
+def _enrich_team_analysis(result: dict, analysis: dict, dmg: dict, enemy_dmg: dict) -> None:
+    """
+    Backfill team_analysis with deterministic values so the UI always has
+    correct data even if the LLM omits or fudges fields.
+    """
+    ta = result.setdefault("team_analysis", {})
+
+    # Always trust deterministic values for these
+    ta["ally_damage_type"]  = dmg["label"]
+    ta["enemy_damage_type"] = enemy_dmg["label"]
+    ta["ally_archetype"]    = analysis["ally_archetype"]
+    ta["enemy_archetype"]   = analysis["enemy_archetype"]
+
+    # Fill missing_from_ally if AI didn't or returned junk
+    if not isinstance(ta.get("missing_from_ally"), list) or not ta["missing_from_ally"]:
+        ta["missing_from_ally"] = [g["name"] for g in analysis["ally_gaps"][:3]]
+
+    # Top-level mirrors for legacy UI components
+    result.setdefault("composition_type", analysis["ally_archetype"])
+
+
+def _attach_deterministic_avoidance(result: dict, avoid_rules: list[dict]) -> None:
+    """Merge our deterministic avoid rules into result.avoid_champions."""
+    existing = result.get("avoid_champions") or []
+    if not isinstance(existing, list):
+        existing = []
+
+    seen = {item.get("champion", "").lower() for item in existing if isinstance(item, dict)}
+
+    # Add up to 6 champions from our rules, with the categorized reason
+    added = 0
+    for rule in avoid_rules:
+        for champ in rule["champions"]:
+            if champ.lower() in seen:
+                continue
+            existing.append({"champion": champ, "reason": rule["reason"]})
+            seen.add(champ.lower())
+            added += 1
+            if added >= 6:
+                break
+        if added >= 6:
+            break
+
+    result["avoid_champions"] = existing
+
+
+def _enforce_filters(
+    result: dict,
+    blacklist: set[str],
+    avoid_set: set[str],
+    drafted: set[str],
+    forbidden_type: str,
+) -> None:
+    """Hard Python-level filter on recommendations after the LLM responds."""
+    if not result.get("recommendations"):
+        return
+
+    def keep(rec: dict) -> bool:
+        name = rec.get("champion", "").strip().lower()
+        if not name or name in drafted:
+            return False
+        if name in blacklist:
+            return False
+        if name in avoid_set:
+            return False
+        if forbidden_type != "None" and rec.get("damage_type") == forbidden_type:
+            return False
+        return True
+
+    filtered = [r for r in result["recommendations"] if keep(r)]
+    # If filter wiped everything, keep originals (better than empty UI)
+    if filtered:
+        result["recommendations"] = filtered
+
+
+def _compute_confidence(rec: dict) -> int:
+    """If score_breakdown is missing/partial, synthesize a confidence score."""
+    sb = rec.get("score_breakdown") or {}
+    if isinstance(sb, dict) and isinstance(sb.get("confidence"), (int, float)):
+        return int(sb["confidence"])
+    # Synthesize from sub-scores if any present
+    lane     = int(sb.get("lane", 25)         or 25)
+    fit      = int(sb.get("team_fit", 15)     or 15)
+    threat   = int(sb.get("threat_answer", 10) or 10)
+    meta     = int(sb.get("meta", 8)          or 8)
+    total    = max(0, min(100, lane + fit + threat + meta))
+    rec.setdefault("score_breakdown", {}).update({
+        "lane": lane, "team_fit": fit, "threat_answer": threat,
+        "meta": meta, "confidence": total,
+    })
+    return total
+
+
+# ── Main entry ────────────────────────────────────────────────────────────────
 
 async def get_draft_suggestions(
     ally_picks:    list[str],
@@ -133,65 +244,66 @@ async def get_draft_suggestions(
     ban_mode:      bool = False,
 ) -> dict:
     """
-    Call Groq to get Challenger-level draft recommendations.
-
-    Args:
-        ally_picks: List of ally champion names (with roles if available)
-        enemy_picks: List of enemy champion names (with roles if available)
-        role: The role the user needs a pick for
-        champion_pool: Optional list of champions the user plays
-        ban_mode: If True, return ban recommendations instead
-
-    Returns:
-        Parsed JSON dict with recommendations
+    Returns a rich draft analysis with:
+      - 3 recommendations (with score_breakdown + fills_gap + answers_threat)
+      - team_analysis (ally/enemy archetype + gaps)
+      - avoid_champions (deterministic + AI-derived)
+      - key_threats, draft_grade, composition_type, etc.
     """
     ally_str  = _format_team(ally_picks)
     enemy_str = _format_team(enemy_picks)
 
-    pool_section = ""
-    if champion_pool:
-        pool_section = f"""
-MY CHAMPION POOL (ONLY recommend champions from this list):
-{chr(10).join(f"  - {c}" for c in champion_pool)}
-IMPORTANT: Do NOT recommend any champion not in the pool above."""
+    # ── Stage 1: Damage balance (deterministic) ───────────────────────────────
+    dmg       = analyze_team_damage(ally_picks)
+    enemy_dmg = analyze_team_damage(enemy_picks)
 
-    # ── Pre-compute damage balance (deterministic, not AI-guessed) ────────────
-    dmg = analyze_team_damage(ally_picks)
+    # ── Stage 2: Composition analysis (deterministic) ─────────────────────────
+    analysis  = analyze_comp(ally_picks, enemy_picks, role)
 
-    # ── Fetch live lolalytics data (single call — reused for prompt + pool + tiers) ──
+    # ── Stage 3: Live Lolalytics counter pool + tier list ─────────────────────
     lolalytics_block:  str       = ""
     verified_counters: list[str] = []
     blacklist_names:   set[str]  = set()
-    tier_list_ref:     list[str] = []
+    tier_list_ref:     list      = []
 
     if not ban_mode and enemy_picks:
         try:
             enemy_data, tier_list_ref = await fetch_all_context(enemy_picks, role)
 
-            # Identify the direct lane opponent
             enemy_laner = None
             for pick in enemy_picks:
                 if f"({role})" in pick:
                     enemy_laner = pick.split("(")[0].strip()
                     break
 
-            # Build lolalytics context block for the AI prompt
             lolalytics_block = build_lolalytics_context(enemy_data, tier_list_ref, role, enemy_laner)
 
-            # Build counter pool (verified wins) + blacklist (verified losses)
             for data in enemy_data:
                 for c in data.get("easy_matchups", []):
                     blacklist_names.add(c["champion"].lower())
                 if enemy_laner and data["champion"].lower() == enemy_laner.lower():
                     verified_counters = [c["champion"] for c in data.get("counters", [])]
         except Exception:
-            pass  # Graceful fallback
+            pass  # Soft fail — analyzer still works
 
-    # Build list of all champions already in the draft (cannot be suggested)
-    all_draft_picks = [
-        p.split("(")[0].strip() for p in ally_picks + enemy_picks if p
-    ]
-    excluded_str = ", ".join(all_draft_picks) if all_draft_picks else "None"
+    # ── Stage 4: Avoidance engine ─────────────────────────────────────────────
+    avoid_rules     = derive_avoidance(ally_picks, enemy_picks, analysis, role)
+    avoidance_block = build_avoidance_block(avoid_rules)
+    avoid_set       = build_avoid_set(avoid_rules)
+
+    # ── Champion pool (Pro feature) ───────────────────────────────────────────
+    pool_section = ""
+    if champion_pool:
+        pool_section = (
+            "\n\nMY CHAMPION POOL (ONLY recommend champions from this list):\n"
+            + "\n".join(f"  - {c}" for c in champion_pool)
+            + "\nIMPORTANT: Do NOT recommend any champion not in the pool above."
+        )
+
+    # ── Build the intelligence-rich user message ──────────────────────────────
+    intel_block = build_intelligence_block(analysis, dmg, role)
+    drafted_names = {p.split("(")[0].strip().lower() for p in ally_picks + enemy_picks if p}
+    excluded_str  = ", ".join(sorted(drafted_names)) if drafted_names else "None"
 
     if ban_mode:
         user_message = f"""Current draft state — recommend the 3 best BANS.
@@ -201,66 +313,49 @@ ALLY TEAM:
 
 ENEMY TEAM:
 {enemy_str}
+{intel_block}
 
-WHAT I NEED: Ban phase recommendations
-This is a high-elo game, assume optimal play from both sides.
+WHAT I NEED: Ban phase recommendations.
 
 Prioritize banning:
-1. Champions that complete or hard-enable the enemy team composition.
-2. Champions that hard-counter our ally picks.
+1. Champions that complete or hard-enable the enemy comp (look at enemy gaps the OTHER way).
+2. Champions that exploit our ally gaps from the intel block.
 3. Overpowered flex picks in the current meta.
 
-Think through all 6 layers then return ONLY valid JSON."""
+Return ONLY valid JSON."""
     else:
         counter_pool_section = ""
         if verified_counters:
-            counter_pool_section = f"""
-
-🎯 MANDATORY CANDIDATE POOL — verified by lolalytics real win-rate data:
-   These champions WIN the 1v1 matchup against the enemy {role} laner:
-   {', '.join(verified_counters)}
-   ⚠ Your 3 picks MUST come from this pool (filtered by AP/AD rule and synergy).
-   ⚠ Suggesting a champion NOT in this pool is only allowed if the AP/AD rule
-     forces you to AND you explain exactly why no pool champion fits."""
+            counter_pool_section = (
+                "\n\n🎯 LOLALYTICS LANE-COUNTER POOL — these WIN the lane on this patch:\n"
+                f"   {', '.join(verified_counters)}\n"
+                "   Cross-reference with the gaps + avoidance intel above before picking."
+            )
 
         user_message = f"""{dmg['hard_rule']}
+{intel_block}
 {lolalytics_block}{counter_pool_section}
+{avoidance_block}
 
-{'='*55}
-Current draft state — recommend the top 3 picks for {role}.
+{'=' * 55}
+Role to fill: {role}
+Ally damage profile: {dmg['label']} ({dmg['ap_count']} AP / {dmg['ad_count']} AD)
+Required damage type for next pick: {dmg['required_type']}
+FORBIDDEN damage type: {dmg['forbidden_type']}
 
-⛔ CANNOT SUGGEST THESE CHAMPIONS (already in draft — ally or enemy):
+⛔ CANNOT SUGGEST THESE (already in draft):
    {excluded_str}
-   These are locked in. Suggesting any of them is an error.
 
-ALLY TEAM (damage type: {dmg['label']} — {dmg['ap_count']} AP / {dmg['ad_count']} AD):
+ALLY TEAM:
 {ally_str}
 
 ENEMY TEAM:
-{enemy_str}
+{enemy_str}{pool_section}
 
-WHAT I NEED:
-- Role to fill: {role}
-- Ally damage profile: {dmg['label']} ({dmg['ap_count']} AP / {dmg['ad_count']} AD)
-- Required damage type for next pick: {dmg['required_type']}
-- FORBIDDEN damage type: {dmg['forbidden_type']}{pool_section}
-
-IMPORTANT:
-- The MANDATORY CANDIDATE POOL above is your PRIMARY source. Use it.
-- The MANDATORY DAMAGE RULE and CANNOT SUGGEST list override everything else.
-- Reference enemy and ally champions BY NAME in your reasoning.
-
-Think through all 6 layers IN ORDER:
-1. Identify both teams' win conditions.
-2. Damage balance is {dmg['label']}. Required: {dmg['required_type']}. DO NOT suggest {dmg['forbidden_type']}.
-3. From the CANDIDATE POOL, pick the best fits for this specific draft.
-4. Find synergies with existing ally picks.
-5. Confirm the pick is on the tier list and meta-viable.
-6. Assess difficulty, power spike timing, and summoner spells.
-
+Now execute the 6-step reasoning order from the system prompt.
 Return ONLY valid JSON, no extra text."""
 
-    # Try every combination of API key × model until one succeeds
+    # ── Call Groq with key + model fallback ───────────────────────────────────
     if not API_KEYS:
         raise RuntimeError("No GROQ_API_KEY found. Set at least one API key in environment variables.")
 
@@ -277,8 +372,8 @@ Return ONLY valid JSON, no extra text."""
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user",   "content": user_message},
                     ],
-                    temperature=0.72,
-                    max_tokens=1400,
+                    temperature=0.7,
+                    max_tokens=1800,
                 )
                 raw_text = response.choices[0].message.content
                 if not raw_text or not raw_text.strip():
@@ -299,14 +394,12 @@ Return ONLY valid JSON, no extra text."""
     if raw_text is None:
         raise last_error or RuntimeError("All Groq API keys exhausted.")
 
-    # ── Robust JSON extraction ─────────────────────────────────────────────────
-    # 1. Strip markdown code fences (```json ... ```)
+    # ── Robust JSON extraction ────────────────────────────────────────────────
     if "```" in raw_text:
         fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw_text)
         if fenced:
             raw_text = fenced.group(1).strip()
 
-    # 2. If still not pure JSON, extract the first { ... } block
     if not raw_text.startswith("{"):
         brace_match = re.search(r"\{[\s\S]*\}", raw_text)
         if brace_match:
@@ -322,38 +415,41 @@ Return ONLY valid JSON, no extra text."""
             f"AI returned non-JSON output. Try again. (raw: {raw_text[:120]!r})"
         ) from exc
 
+    # ── Python-level safety filters (hard guarantees) ─────────────────────────
+    _enforce_filters(result, blacklist_names, avoid_set, drafted_names, dmg["forbidden_type"])
 
-    # ── Python-level safety filter — remove blacklisted picks ─────────────────
-    if blacklist_names and result.get("recommendations"):
-        filtered = [
-            rec for rec in result["recommendations"]
-            if rec.get("champion", "").lower() not in blacklist_names
-        ]
-        if filtered:
-            result["recommendations"] = filtered
+    # ── Backfill team_analysis with deterministic values ──────────────────────
+    _enrich_team_analysis(result, analysis, dmg, enemy_dmg)
 
-    # ── Patch tier badges — from OP.GG Tier 1/2/3 data ───────────────────────
-    # tier_list_ref is now list[dict] with real tier numbers: 1=S, 2=A, 3=B
+    # ── Attach deterministic avoidance rules ──────────────────────────────────
+    _attach_deterministic_avoidance(result, avoid_rules)
+
+    # ── Confidence scoring + back-compat field aliases ────────────────────────
+    if result.get("recommendations"):
+        for rec in result["recommendations"]:
+            _compute_confidence(rec)
+            # Back-compat: older UI fields
+            if "analysis" not in rec and rec.get("reason"):
+                rec["analysis"] = rec["reason"]
+            if "synergizes_with" not in rec and rec.get("synergies"):
+                rec["synergizes_with"] = rec["synergies"]
+
+    # ── Patch tier badges (existing OP.GG integration) ────────────────────────
     if tier_list_ref and result.get("recommendations"):
         from .opgg_service import build_tier_lookup
-        tier_lookup = build_tier_lookup(tier_list_ref) if isinstance(tier_list_ref[0], dict) else {}
-
-        # Fallback: position-based if OP.GG returned old list[str] format
-        if not tier_lookup and isinstance(tier_list_ref[0], str):
+        if isinstance(tier_list_ref[0], dict):
+            tier_lookup = build_tier_lookup(tier_list_ref)
+            for rec in result["recommendations"]:
+                entry = tier_lookup.get(rec.get("champion", "").lower())
+                rec["patch_tier"] = entry["tier_label"] if entry else "B"
+        else:
             pos_map = {name.lower(): i for i, name in enumerate(tier_list_ref)}
             for rec in result["recommendations"]:
                 pos = pos_map.get(rec.get("champion", "").lower())
-                rec["patch_tier"] = "S" if pos is not None and pos < 3 else \
-                                    "A" if pos is not None and pos < 8 else \
-                                    "B" if pos is not None and pos < 14 else "C"
-        else:
-            for rec in result["recommendations"]:
-                entry = tier_lookup.get(rec.get("champion", "").lower())
-                if entry is None:
-                    rec["patch_tier"] = "B"   # Not in OP.GG tier list for this role
-                else:
-                    rec["patch_tier"] = entry["tier_label"]  # "S", "A", or "B"
-
-
+                rec["patch_tier"] = (
+                    "S" if pos is not None and pos < 3 else
+                    "A" if pos is not None and pos < 8 else
+                    "B" if pos is not None and pos < 14 else "C"
+                )
 
     return result

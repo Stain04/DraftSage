@@ -3,7 +3,7 @@ import { Swords, Shield, Wand2, Crosshair, Users, Brain, RefreshCw, Lock, Ban, C
 import { toast } from "react-hot-toast";
 import ChampionSearch from "./ChampionSearch";
 import TeamSlot from "./TeamSlot";
-import RecommendationCard, { RecommendationSkeleton, WhyNotSection, TeamAnalysisPanel } from "./RecommendationCard";
+import RecommendationCard, { RecommendationSkeleton, WhyNotSection, TeamAnalysisPanel, AvoidChampionsSection } from "./RecommendationCard";
 import { getSuggestions } from "../api/geminiApi";
 import { fetchAllChampions } from "../api/riotApi";
 import { useAuth } from "../context/AuthContext";
@@ -440,6 +440,7 @@ export default function DraftBoard() {
                 {result.recommendations?.map((rec, i) => (
                   <RecommendationCard key={rec.champion} rec={rec} rank={i} isTopPick={i === 0} banMode={banMode} />
                 ))}
+                <AvoidChampionsSection avoidChampions={result.avoid_champions} />
                 <WhyNotSection
                   whyNot={result.why_not}
                   teamWinCondition={result.team_win_condition}
