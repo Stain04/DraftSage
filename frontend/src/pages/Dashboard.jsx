@@ -105,12 +105,18 @@ export default function Dashboard() {
 
 
   // Show upgrade success banner when ?upgraded=true
+  // Must refresh session first so the new is_pro metadata is reflected immediately
   useEffect(() => {
     if (searchParams.get("upgraded") === "true") {
-      setShowUpgradeBanner(true);
-      toast.success("Welcome to DraftSage Pro! 🎉");
-      // Clean the query param from the URL without reload
+      // Remove query param immediately so re-renders don't re-trigger
       setSearchParams({});
+      // Refresh the Supabase session — this re-issues the JWT with updated metadata
+      supabase.auth.refreshSession().then(() => {
+        setShowUpgradeBanner(true);
+        toast.success("Welcome to DraftSage Pro! 🎉");
+        // Reload so AuthContext re-reads the fresh token and isPro becomes true
+        setTimeout(() => window.location.reload(), 800);
+      });
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
