@@ -10,7 +10,7 @@ import RecommendationCard, {
   RecommendationSkeleton, WhyNotSection,
   TeamAnalysisPanel, AvoidChampionsSection,
 } from "./RecommendationCard";
-import { getSuggestions } from "../api/geminiApi";
+import { getSuggestions, describeApiError } from "../api/geminiApi";
 import { fetchAllChampions } from "../api/riotApi";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../context/AuthContext";
@@ -196,7 +196,7 @@ export default function DraftBoard() {
         document.getElementById("engine-output")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 60);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Engine analysis failed. Please try again.");
+      toast.error(describeApiError(err, "Engine analysis failed. Please try again."));
     } finally {
       setLoading(false);
     }

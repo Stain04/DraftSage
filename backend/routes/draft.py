@@ -82,7 +82,7 @@ async def suggest_champions(body: SuggestRequest):
     except Exception as e:
         raise HTTPException(
             status_code=502,
-            detail=f"AI analysis failed: {str(e)}",
+            detail=f"Engine analysis failed: {str(e)}",
         )
 
     return result
