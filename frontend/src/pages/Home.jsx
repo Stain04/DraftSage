@@ -11,14 +11,14 @@ const STATS = [
   { value: "12-axis",    label: "Team composition score" },
   { value: "170+",       label: "Champions analyzed" },
   { value: "Live",       label: "Patch data on every request" },
-  { value: "<3s",        label: "Average AI response time" },
+  { value: "<3s",        label: "Average Engine response time" },
 ];
 
-// ── New AI brain features ─────────────────────────────────────────────────────
+// ── DraftSage Engine features ────────────────────────────────────────────────
 const BRAIN_FEATURES = [
   {
     icon: <Cpu size={22} className="text-gold" />,
-    badge: "Core AI",
+    badge: "Core Engine",
     title: "Composition Gap Analyzer",
     desc: "Scores your team across 12 axes — engage, CC, frontline, peel, poke, waveclear, sustain, disengage, pick, splitpush, dive, scaling — and surfaces the exact gaps your next pick must fill.",
   },
@@ -43,8 +43,8 @@ const BRAIN_FEATURES = [
   {
     icon: <Activity size={22} className="text-accent-purple" />,
     badge: "Live data",
-    title: "Real Patch Counters",
-    desc: "Pulls fresh lolalytics + OP.GG data on every request. No hardcoded matchups, no stale meta calls — recommendations adapt the moment Riot ships a patch.",
+    title: "Live Patch Recalibration",
+    desc: "The DraftSage Engine re-evaluates every counter matchup and threat tier against the current patch — every request, no caching. No hardcoded matchups, no stale meta calls. Recommendations adapt the moment Riot ships a patch.",
   },
   {
     icon: <Eye size={22} className="text-accent-teal" />,
@@ -63,7 +63,7 @@ const HOW_IT_WORKS = [
   },
   {
     n: "02",
-    title: "AI analyzes 4 layers",
+    title: "Engine analyzes 4 layers",
     desc: "Damage balance · Composition gaps · Enemy threats · Lane counters. All in parallel, all on live patch data.",
     icon: <Brain size={20} className="text-accent-blue" />,
   },
@@ -76,7 +76,7 @@ const HOW_IT_WORKS = [
 ];
 
 const TESTIMONIALS = [
-  { name: "Kaito_Rift",   rank: "Challenger", text: "Finally an AI that doesn't just say 'pick Zed' when the enemy has 3 tanks. Actually understands draft theory." },
+  { name: "Kaito_Rift",   rank: "Challenger", text: "Finally a draft tool that doesn't just say 'pick Zed' when the enemy has 3 tanks. Actually understands draft theory." },
   { name: "LanePhase_EU", rank: "Master",     text: "Used this in my promos. The win condition explanations are spot on — it's like having a coach in queue." },
   { name: "CloudDragon9", rank: "Diamond I",  text: "The damage balance suggestion alone won me a game. Enemy had full AP and DraftSage recommended Garen top." },
 ];
@@ -105,7 +105,7 @@ export default function Home() {
           {/* Badge — cyan tech accent */}
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-cyan/40 bg-navy-900/70 backdrop-blur mb-6 text-xs text-neon-cyan font-bold uppercase tracking-widest animate-flicker shadow-glow-cyan">
             <Sparkles size={12} className="animate-pulse" />
-            <span>AI Brain v2 — Composition Intelligence Online</span>
+            <span>DraftSage Engine v2 — Composition Intelligence Online</span>
           </div>
 
           {/* Headline */}
@@ -132,7 +132,7 @@ export default function Home() {
           </div>
 
           <p className="text-xs text-navy-400 mb-12 animate-fade-in" style={{ animationDelay: "0.5s" }}>
-            No credit card required · 3 free AI suggestions per day · 30-day refund on Pro
+            No credit card required · 3 free Engine suggestions per day · 30-day refund on Pro
           </p>
 
           {/* Stats strip */}
@@ -297,11 +297,11 @@ export default function Home() {
 
         <div className="max-w-6xl mx-auto relative z-10">
           <div className="text-center mb-14">
-            <p className="text-xs text-gold uppercase tracking-widest font-semibold mb-3">The AI Brain</p>
+            <p className="text-xs text-gold uppercase tracking-widest font-semibold mb-3">The DraftSage Engine</p>
             <h2 className="font-display text-3xl sm:text-4xl font-bold text-white mb-3">
               Not a tier list. <span className="text-gradient-gold">A draft coach.</span>
             </h2>
-            <p className="text-navy-300 max-w-2xl mx-auto">Every other tool tells you what's strong in a vacuum. DraftSage analyzes <em>this draft</em> — your gaps, their threats, the actual patch.</p>
+            <p className="text-navy-300 max-w-2xl mx-auto">Every other tool tells you what's strong in a vacuum. The DraftSage Engine analyzes <em>this draft</em> — your gaps, their threats, the actual patch.</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -397,9 +397,9 @@ export default function Home() {
                   <Crown size={12} fill="currentColor" /> Pro · $6.58 / month (yearly)
                 </div>
                 <h2 className="font-display text-3xl sm:text-4xl font-bold mb-4 leading-tight">
-                  <span className="text-white">The full brain.</span>
+                  <span className="text-white">The full Engine.</span>
                   <br />
-                  <span className="text-gradient-gold">For less than a skin.</span>
+                  <span className="text-gradient-gold">Zero limits.</span>
                 </h2>
                 <p className="text-navy-200 mb-6 leading-relaxed">
                   Unlimited suggestions. Composition analyzer. Avoidance intelligence. Confidence scoring. Champion pool filter. Ban mode. Cloud draft history. <span className="text-white font-semibold">All of it.</span>
@@ -427,7 +427,7 @@ export default function Home() {
                     "Confidence scoring breakdown",
                     "Ban Mode + Champion Pool",
                     "Cloud-synced draft history",
-                    "Priority AI model routing",
+                    "Priority Engine routing",
                     "Patch tier badges (S/A/B/C)",
                     "Early access to new features",
                   ].map((item, i) => (

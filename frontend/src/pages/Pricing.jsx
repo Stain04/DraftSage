@@ -11,14 +11,14 @@ import { toast } from "react-hot-toast";
 // ── Feature data ──────────────────────────────────────────────────────────────
 
 const FREE_FEATURES = [
-  "3 AI draft suggestions per day",
+  "3 Engine draft suggestions per day",
   "Basic damage-balance analysis",
   "Champion search & draft board",
   "Top-3 pick recommendations",
 ];
 
 const PRO_FEATURES = [
-  { label: "Unlimited AI draft suggestions", new: false },
+  { label: "Unlimited Engine draft suggestions", new: false },
   { label: "Team Composition Gap Analyzer", new: true },
   { label: "Avoidance Intelligence (do-not-pick list)", new: true },
   { label: "Confidence scoring + reasoning breakdown", new: true },
@@ -26,12 +26,12 @@ const PRO_FEATURES = [
   { label: "Champion Pool filtering", new: false },
   { label: "Patch tier badges (S/A/B/C)", new: false },
   { label: "Cloud-synced draft history", new: false },
-  { label: "Priority AI model routing", new: true },
+  { label: "Priority Engine routing", new: true },
   { label: "Early access to new features", new: true },
 ];
 
 const COMPARISON_ROWS = [
-  { label: "AI draft suggestions",            free: "3 / day",     pro: <span className="flex items-center gap-1 justify-center"><InfinityIcon size={14} /> Unlimited</span> },
+  { label: "Engine draft suggestions",        free: "3 / day",     pro: <span className="flex items-center gap-1 justify-center"><InfinityIcon size={14} /> Unlimited</span> },
   { label: "Team Composition Gap Analyzer",   free: false,         pro: true },
   { label: "Avoidance Intelligence",          free: false,         pro: true },
   { label: "Per-pick confidence scoring",     free: "Limited",     pro: "Full breakdown" },
@@ -39,12 +39,12 @@ const COMPARISON_ROWS = [
   { label: "Champion Pool filter",            free: false,         pro: true },
   { label: "Patch tier badges",               free: false,         pro: true },
   { label: "Cloud draft history",             free: "Local only",  pro: "Unlimited cloud" },
-  { label: "Priority AI model",               free: false,         pro: true },
+  { label: "Priority Engine routing",         free: false,         pro: true },
   { label: "Early access to new features",    free: false,         pro: true },
 ];
 
 const TESTIMONIALS = [
-  { name: "Kaito_Rift",    rank: "Challenger", text: "Finally an AI that doesn't just say 'pick Zed' when the enemy has 3 tanks. Actually understands draft theory." },
+  { name: "Kaito_Rift",    rank: "Challenger", text: "Finally a draft tool that doesn't just say 'pick Zed' when the enemy has 3 tanks. Actually understands draft theory." },
   { name: "LanePhase_EU",  rank: "Master",     text: "Used this in my promos. The win condition explanations are spot on — it's like having a coach in queue." },
   { name: "CloudDragon9",  rank: "Diamond I",  text: "The damage balance suggestion alone won me a game. Enemy had full AP and DraftSage recommended Garen top." },
 ];
@@ -105,11 +105,11 @@ export default function Pricing() {
             <Sparkles size={12} /> {"// Choose Your Plan"}
           </div>
           <h1 className="font-display text-4xl sm:text-5xl font-bold mb-4">
-            <span className="text-white">Win more games.</span>{" "}
-            <span className="text-gradient-gold">Pay less than a skin.</span>
+            <span className="text-white">Win more drafts.</span>{" "}
+            <span className="text-gradient-gold">Climb more divisions.</span>
           </h1>
           <p className="text-navy-300 text-lg max-w-2xl mx-auto">
-            Pro unlocks the full DraftSage brain — gap analysis, avoidance intelligence, and confidence-scored picks built for ranked.
+            Pro unlocks the full DraftSage Engine — gap analysis, avoidance intelligence, and confidence-scored picks built for the ranked grind.
           </p>
         </div>
 
@@ -371,8 +371,8 @@ export default function Pricing() {
               a: "Same product, identical features. Yearly is $79/year (~$6.58/month) — a 34% discount for committing up front. Yearly subscribers also get early access to new features.",
             },
             {
-              q: "Will the AI still work if Riot changes the meta?",
-              a: "Yes. DraftSage pulls fresh patch data on every request (lolalytics counters + OP.GG tier lists). No stale recommendations — ever.",
+              q: "Will the Engine adapt to patch changes?",
+              a: "Yes. The DraftSage Engine recalibrates against live patch data on every single request — counter matchups, threat tiers, and meta priorities are all re-evaluated. No cached recommendations, no stale meta. Whatever Riot ships this Tuesday, you get analysis tuned to it on Wednesday.",
             },
             {
               q: "Is DraftSage affiliated with Riot Games?",
@@ -393,7 +393,7 @@ export default function Pricing() {
         {/* ── Final CTA ───────────────────────────────────────────────── */}
         <div className="text-center mt-16">
           <h3 className="font-display text-2xl font-bold text-white mb-3">Ready to draft like a Challenger?</h3>
-          <p className="text-sm text-navy-400 mb-6">Less than a single skin per month.</p>
+          <p className="text-sm text-navy-400 mb-6">Unlimited Engine access · cancel anytime · 30-day refund.</p>
           {!isPro && (
             <button
               onClick={() => handleUpgrade(billing)}

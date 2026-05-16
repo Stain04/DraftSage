@@ -155,11 +155,12 @@
   -webkit-text-fill-color: transparent;
 }
 
-/* Premium card — heavier shadow + subtle inner glow */
+/* Premium card — heavier shadow + subtle inner glow.
+   Background kept fully opaque so glow-frame doesn't bleed through. */
 .card-premium {
   @apply rounded-2xl border border-gold/25;
   background:
-    linear-gradient(135deg, rgba(17,28,78,0.85), rgba(6,10,30,0.95)),
+    linear-gradient(135deg, rgba(17,28,78,1), rgba(6,10,30,1)),
     radial-gradient(circle at 30% 0%, rgba(200,169,81,0.10), transparent 60%);
   background-blend-mode: normal;
   box-shadow:
@@ -219,14 +220,14 @@
 .glow-frame::before {
   content: '';
   position: absolute;
-  inset: -4px;
+  inset: -3px;
   border-radius: inherit;
   z-index: -1;
   background: linear-gradient(135deg, #C8A951 0%, #00E5FF 50%, #C8A951 100%);
   background-size: 250% 250%;
-  filter: blur(22px);
-  opacity: 0.5;
-  animation: glow-shift 6s ease-in-out infinite, glow-breathe 4s ease-in-out infinite;
+  filter: blur(14px);
+  opacity: 0.30;
+  animation: glow-shift 8s ease-in-out infinite, glow-breathe 5s ease-in-out infinite;
   pointer-events: none;
   will-change: transform, opacity, background-position;
 }
@@ -235,8 +236,8 @@
   50%      { background-position: 100% 50%; }
 }
 @keyframes glow-breathe {
-  0%, 100% { opacity: 0.40; transform: scale(1);     }
-  50%      { opacity: 0.72; transform: scale(1.015); }
+  0%, 100% { opacity: 0.22; transform: scale(1);     }
+  50%      { opacity: 0.38; transform: scale(1.008); }
 }
 
 /* Marquee / scroll-x */

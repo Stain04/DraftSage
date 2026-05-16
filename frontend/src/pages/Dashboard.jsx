@@ -171,7 +171,7 @@ export default function Dashboard() {
             <CheckCircle size={24} className="text-gold flex-shrink-0" />
             <div className="flex-1">
               <p className="font-semibold text-white">You're now on DraftSage Pro! 🎉</p>
-              <p className="text-sm text-navy-300 mt-0.5">Unlimited AI suggestions are now unlocked. Go draft something amazing.</p>
+              <p className="text-sm text-navy-300 mt-0.5">Unlimited Engine access is now unlocked. Go draft something amazing.</p>
             </div>
             <button
               onClick={() => setShowUpgradeBanner(false)}
@@ -209,7 +209,7 @@ export default function Dashboard() {
               {isPro ? "Pro" : "Free"}
             </p>
             <p className="text-xs text-navy-400 mb-4">
-              {isPro ? "Unlimited AI suggestions" : `${suggestionsLeft} / 3 suggestions left today`}
+              {isPro ? "Unlimited Engine access" : `${suggestionsLeft} / 3 suggestions left today`}
             </p>
             {!isPro && (
               <div className="w-full bg-navy-800 rounded-full h-1.5 mb-4">
@@ -234,7 +234,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="font-semibold text-white text-sm">Open Draft Board</p>
-                <p className="text-xs text-navy-500 mt-0.5">Get AI pick suggestions</p>
+                <p className="text-xs text-navy-500 mt-0.5">Get Engine pick suggestions</p>
               </div>
             </Link>
 

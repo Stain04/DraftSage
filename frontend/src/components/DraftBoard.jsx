@@ -191,7 +191,7 @@ export default function DraftBoard() {
         setUsage({ count: newCount, date: new Date().toDateString() });
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || "AI analysis failed. Check your API key.");
+      toast.error(err.response?.data?.detail || "Engine analysis failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -208,7 +208,7 @@ export default function DraftBoard() {
             <h1 className="font-display text-3xl font-bold text-white">Draft Board</h1>
           </div>
           <p className="text-navy-400 text-sm">
-            Add picks to both sides, select your role, and let DraftSage AI analyze the perfect pick.
+            Add picks to both sides, select your role, and let the DraftSage Engine analyze the perfect pick.
           </p>
           {!isPro && !isAdmin && (
             <p className={`mt-2 text-xs font-medium ${usageLeft <= 1 ? "text-red-400" : "text-navy-400"}`}>
@@ -309,7 +309,7 @@ export default function DraftBoard() {
                     </div>
                   ) : (
                     <p className="text-xs text-navy-500 text-center py-2">
-                      No pool set — AI will suggest any champion
+                      No pool set — Engine will suggest any champion
                     </p>
                   )}
                 </div>
@@ -405,7 +405,7 @@ export default function DraftBoard() {
                   {banMode ? "Analyzing Bans..." : "Analyzing Draft..."}
                 </>
               ) : (
-                <>{banMode ? <><Ban size={20} /> Get Ban Recommendations</> : <><Brain size={20} /> Get AI Suggestion</>}</>
+                <>{banMode ? <><Ban size={20} /> Get Ban Recommendations</> : <><Brain size={20} /> Run DraftSage Engine</>}</>
               )}
             </button>
 
@@ -432,7 +432,7 @@ export default function DraftBoard() {
                 <div className="flex items-center gap-2 py-2">
                   <div className="divider-gold flex-1" />
                   <span className="text-xs text-gold font-semibold uppercase tracking-widest">
-                    {banMode ? "Ban Recommendations" : "AI Recommendations"}
+                    {banMode ? "Ban Recommendations" : "Engine Recommendations"}
                   </span>
                   <div className="divider-gold flex-1" />
                 </div>
