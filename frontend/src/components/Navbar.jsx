@@ -21,11 +21,15 @@ export default function Navbar() {
 
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 rounded-lg bg-gold-gradient flex items-center justify-center shadow-gold group-hover:scale-110 transition-transform">
-              <Sword size={18} className="text-navy-900" />
+            <div className="relative">
+              <div className="w-9 h-9 rounded-lg bg-gold-gradient flex items-center justify-center shadow-gold group-hover:scale-110 transition-transform relative overflow-hidden">
+                <Sword size={18} className="text-navy-900 relative z-10" />
+                <div className="absolute inset-0 bg-cyan/20 opacity-0 group-hover:opacity-100 transition-opacity mix-blend-overlay" />
+              </div>
+              <div className="absolute -inset-0.5 rounded-lg bg-cyan/30 blur opacity-0 group-hover:opacity-60 transition-opacity -z-10" />
             </div>
-            <span className="font-display text-xl font-bold text-gold">DraftSage</span>
-            <span className="hidden sm:block text-xs text-navy-300 font-medium mt-1">AI Draft</span>
+            <span className="font-display text-lg sm:text-xl font-bold text-gradient-gold tracking-wider">DRAFTSAGE</span>
+            <span className="hidden sm:block text-[10px] text-cyan font-mono font-medium mt-1 uppercase tracking-widest">v2</span>
           </Link>
 
           {/* Nav Links */}

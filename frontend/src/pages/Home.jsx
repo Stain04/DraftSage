@@ -92,17 +92,20 @@ export default function Home() {
         {/* Animated grid */}
         <div className="absolute inset-0 bg-grid opacity-70" />
 
-        {/* Aurora blobs */}
-        <div className="aurora-blob bg-gold/40 w-[600px] h-[600px] -top-20 left-1/2 -translate-x-1/2" />
-        <div className="aurora-blob bg-accent-blue/25 w-[500px] h-[500px] top-[20%] -left-32" style={{ animationDelay: "2s" }} />
-        <div className="aurora-blob bg-accent-purple/20 w-[450px] h-[450px] top-[30%] -right-24" style={{ animationDelay: "4s" }} />
+        {/* Aurora blobs — gold + cyan + magenta tri-color */}
+        <div className="aurora-blob bg-gold/40    w-[600px] h-[600px] -top-20 left-1/2 -translate-x-1/2" />
+        <div className="aurora-blob bg-cyan/30    w-[500px] h-[500px] top-[20%] -left-32" style={{ animationDelay: "2s" }} />
+        <div className="aurora-blob bg-magenta/25 w-[450px] h-[450px] top-[30%] -right-24" style={{ animationDelay: "4s" }} />
+
+        {/* HUD scanline */}
+        <div className="hud-scan-line" />
 
         <div className="max-w-5xl mx-auto text-center relative z-10">
 
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-gold/40 bg-navy-900/60 backdrop-blur mb-6 text-xs text-gold font-semibold uppercase tracking-widest animate-fade-in">
+          {/* Badge — cyan tech accent */}
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-cyan/40 bg-navy-900/70 backdrop-blur mb-6 text-xs text-neon-cyan font-bold uppercase tracking-widest animate-flicker shadow-glow-cyan">
             <Sparkles size={12} className="animate-pulse" />
-            <span>AI Brain v2 — Now with Composition Intelligence</span>
+            <span>AI Brain v2 — Composition Intelligence Online</span>
           </div>
 
           {/* Headline */}
@@ -145,15 +148,15 @@ export default function Home() {
 
         {/* ── AI Demo card (the proof) ───────────────────────────────── */}
         <div className="max-w-4xl mx-auto mt-16 animate-slide-up relative z-10" style={{ animationDelay: "0.7s" }}>
-          <div className="card-premium rounded-2xl p-6 sm:p-8 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-px bg-gold-gradient" />
+          <div className="card-premium hud-corners rounded-2xl p-6 sm:p-8 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan to-transparent" />
 
             <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
               <div className="flex items-center gap-2">
-                <Brain size={18} className="text-gold animate-pulse" />
-                <span className="text-xs text-gold font-bold uppercase tracking-widest">Live Draft Analysis</span>
+                <Brain size={18} className="text-cyan animate-pulse" />
+                <span className="text-xs text-neon-cyan font-bold uppercase tracking-widest font-mono">{"// Live Draft Analysis"}</span>
               </div>
-              <span className="text-[10px] text-navy-400 uppercase tracking-wider">Bot lane · Patch 26.10</span>
+              <span className="text-[10px] text-navy-400 uppercase tracking-wider font-mono">Bot lane · Patch 26.10</span>
             </div>
 
             <div className="grid grid-cols-12 gap-4">
@@ -215,15 +218,15 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Avoid pill */}
-                <div className="p-2.5 rounded-xl bg-red-900/20 border border-red-500/30">
+                {/* Avoid pill — magenta accent */}
+                <div className="p-2.5 rounded-xl bg-magenta/10 border border-magenta/40 relative">
                   <div className="flex items-center gap-1.5 mb-1.5">
-                    <AlertTriangle size={11} className="text-red-400" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-red-400">Do Not Pick</span>
+                    <AlertTriangle size={11} className="text-magenta" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-magenta font-mono">{"// DO NOT PICK"}</span>
                   </div>
                   <div className="flex flex-wrap gap-1 mb-1">
                     {["Jinx", "Kog'Maw", "Twitch"].map((c) => (
-                      <span key={c} className="px-1.5 py-0.5 rounded text-[10px] bg-red-500/15 text-red-200 border border-red-500/30 font-medium">{c}</span>
+                      <span key={c} className="px-1.5 py-0.5 rounded text-[10px] bg-magenta/15 text-magenta-light border border-magenta/30 font-medium">{c}</span>
                     ))}
                   </div>
                   <p className="text-[10px] text-navy-400 leading-snug">Enemy has 4 dive-score from Vi + Zed — immobile ADCs get jumped.</p>
@@ -474,13 +477,15 @@ export default function Home() {
       {/* ════════════════════ FINAL CTA ════════════════════ */}
       <section className="py-20 px-4 relative overflow-hidden">
         <div className="aurora-blob bg-gold/30 w-[400px] h-[400px] top-1/4 left-1/2 -translate-x-1/2" />
+        <div className="aurora-blob bg-cyan/20 w-[350px] h-[350px] top-1/4 left-1/4" style={{ animationDelay: "2s" }} />
+        <div className="aurora-blob bg-magenta/20 w-[350px] h-[350px] top-1/4 right-1/4" style={{ animationDelay: "4s" }} />
         <div className="max-w-2xl mx-auto text-center relative z-10">
-          <div className="card-premium rounded-3xl p-10 relative overflow-hidden bg-noise">
-            <div className="absolute top-0 left-0 right-0 h-px bg-gold-gradient" />
-            <Brain size={44} className="text-gold mx-auto mb-5 animate-float" />
+          <div className="card-premium hud-corners rounded-3xl p-10 relative overflow-hidden bg-noise">
+            <div className="absolute top-0 left-0 right-0 h-px bg-esports-gradient" />
+            <Brain size={44} className="text-cyan mx-auto mb-5 animate-float" />
             <h2 className="font-display text-3xl sm:text-4xl font-bold text-white mb-3">Ready to win your next draft?</h2>
             <p className="text-navy-300 mb-8">Open the board. Build your draft. See what the brain says.</p>
-            <Link to="/draft" className="btn-gold text-base px-10 py-4 inline-flex items-center gap-2">
+            <Link to="/draft" className="btn-esports text-base px-10 py-4 inline-flex items-center gap-2">
               <Brain size={20} /> Open Draft Board <ArrowRight size={18} />
             </Link>
             <p className="mt-4 text-xs text-navy-400">No card required · 3 free suggestions per day</p>

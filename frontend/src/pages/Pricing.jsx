@@ -90,17 +90,19 @@ export default function Pricing() {
 
   return (
     <div className="min-h-screen pt-28 pb-16 px-4 relative overflow-hidden bg-noise">
-      {/* Aurora blobs */}
-      <div className="aurora-blob bg-gold/30      w-[480px] h-[480px] top-[10%] -left-32" />
-      <div className="aurora-blob bg-accent-blue/20 w-[400px] h-[400px] top-[40%] -right-24" style={{ animationDelay: "3s" }} />
-      <div className="absolute inset-0 bg-grid pointer-events-none opacity-60" />
+      {/* Aurora blobs — tri-color */}
+      <div className="aurora-blob bg-gold/30    w-[480px] h-[480px] top-[10%] -left-32" />
+      <div className="aurora-blob bg-cyan/25    w-[400px] h-[400px] top-[40%] -right-24" style={{ animationDelay: "3s" }} />
+      <div className="aurora-blob bg-magenta/15 w-[400px] h-[400px] top-[70%] left-1/3" style={{ animationDelay: "5s" }} />
+      <div className="absolute inset-0 bg-hex pointer-events-none opacity-50" />
+      <div className="hud-scan-line" />
 
       <div className="max-w-6xl mx-auto relative z-10">
 
         {/* ── Header ───────────────────────────────────────────────────── */}
         <div className="text-center mb-10 animate-fade-in">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-gold/30 bg-gold/5 mb-4 text-sm text-gold font-medium">
-            <Sparkles size={14} /> Pricing
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-cyan/40 bg-navy-900/60 backdrop-blur mb-4 text-xs text-neon-cyan font-bold uppercase tracking-widest shadow-glow-cyan">
+            <Sparkles size={12} /> {"// Choose Your Plan"}
           </div>
           <h1 className="font-display text-4xl sm:text-5xl font-bold mb-4">
             <span className="text-white">Win more games.</span>{" "}
@@ -176,7 +178,7 @@ export default function Pricing() {
           </div>
 
           {/* Pro plan */}
-          <div className="card-premium p-7 flex flex-col relative overflow-hidden animate-slide-up animate-highlight bg-noise"
+          <div className="card-premium hud-corners p-7 flex flex-col relative animate-slide-up glow-frame bg-noise"
                style={{ animationDelay: "0.1s" }}>
             <div className="absolute top-0 left-0 right-0 h-px bg-gold-gradient" />
 
@@ -396,7 +398,7 @@ export default function Pricing() {
             <button
               onClick={() => handleUpgrade(billing)}
               disabled={loading}
-              className="btn-gold inline-flex items-center gap-2 px-8 py-4 text-base font-bold"
+              className="btn-esports inline-flex items-center gap-2 px-8 py-4 text-base font-bold"
             >
               <Brain size={18} />
               {isYearly ? "Upgrade — Save 34%" : "Upgrade to Pro"}
