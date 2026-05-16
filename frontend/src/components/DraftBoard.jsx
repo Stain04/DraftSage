@@ -503,6 +503,22 @@ export default function DraftBoard() {
                 <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan/40 to-transparent" />
               </div>
 
+              {/* Pool warning — when pool filter changed the output */}
+              {result.pool_warning && (
+                <div className={`card rounded-2xl p-4 border flex items-start gap-3 animate-fade-in
+                  ${result.pool_empty
+                    ? "border-magenta/40 bg-magenta/5"
+                    : "border-gold/30 bg-gold/5"}`}>
+                  <Bookmark size={16} className={`flex-shrink-0 mt-0.5 ${result.pool_empty ? "text-magenta" : "text-gold"}`} />
+                  <div className="flex-1 text-sm">
+                    <p className={`font-bold uppercase tracking-wider text-[11px] mb-1 ${result.pool_empty ? "text-magenta" : "text-gold"}`}>
+                      {result.pool_empty ? "No pool match" : "Champion Pool filter active"}
+                    </p>
+                    <p className="text-navy-200 leading-relaxed">{result.pool_warning}</p>
+                  </div>
+                </div>
+              )}
+
               {/* Team analysis (full-width) */}
               <TeamAnalysisPanel teamAnalysis={result.team_analysis} />
 

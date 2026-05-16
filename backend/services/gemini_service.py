@@ -76,12 +76,17 @@ REASONING ORDER (think through silently, then output ONLY JSON):
             Sum gives confidence (0-100).
   Step 6 — Write tight reasoning that names specific ally + enemy champions.
 
-STRICT RULES:
+STRICT RULES (in priority order — the top rule wins all conflicts):
+  - If a CHAMPION POOL is supplied, recommendations MUST come from it.
+    Returning fewer than 3 in-pool picks is fine. Returning an empty list
+    with a 'why_not' explanation is fine. Returning ANY off-pool champion
+    is a complete failure of the response.
   - Never recommend a champion already in the draft.
   - Never recommend a champion in the lane blacklist (loses lane on real data).
   - Never recommend a champion in the avoidance list (loses comp-level).
   - Never recommend the FORBIDDEN damage type.
-  - The 3 recommendations MUST be different archetypes.
+  - The 3 recommendations should be different archetypes WHEN POOL ALLOWS —
+    skip this rule if pool only contains 1-2 champions for this role.
   - All reasoning must reference enemy/ally champions BY NAME.
   - If filling a gap and winning lane conflict, prioritize the GAP — explain trade-off.
 
@@ -247,6 +252,57 @@ def _enforce_filters(
         result["recommendations"] = filtered
 
 
+def _enforce_pool_filter(result: dict, champion_pool: list[str] | None) -> None:
+    """
+    HARD pool enforcement — drop any recommendation whose champion isn't in
+    the user's pool. Unlike _enforce_filters, this NEVER falls back to
+    keeping out-of-pool picks: if the user explicitly limited the engine to
+    a list of champs, recommending anything outside that list is a contract
+    violation and worse than an empty result.
+
+    Adds a `pool_warning` field to the result when filtering removed picks
+    so the UI can explain what happened.
+    """
+    if not champion_pool:
+        return
+    recs = result.get("recommendations") or []
+    if not recs:
+        return
+
+    pool_lower = {c.strip().lower() for c in champion_pool if c}
+
+    in_pool:     list[dict] = []
+    out_of_pool: list[str]  = []
+    for rec in recs:
+        name = rec.get("champion", "").strip()
+        if not name:
+            continue
+        if name.lower() in pool_lower:
+            in_pool.append(rec)
+        else:
+            out_of_pool.append(name)
+
+    result["recommendations"] = in_pool
+
+    if out_of_pool:
+        # Surface a clear note so the UI can show why fewer recs came back
+        result["pool_warning"] = (
+            f"The Engine tried to suggest {', '.join(out_of_pool)} but they're "
+            f"not in your champion pool. Showing only pool-matching picks. "
+            f"Add more champions to your pool if you want broader options."
+        )
+
+    if not in_pool:
+        # Genuinely no in-pool fits — leave recommendations empty and surface
+        # a clear, actionable message for the UI.
+        result["pool_empty"] = True
+        result["pool_warning"] = (
+            "No champion in your pool fits this draft state. "
+            "Try adding picks that match the role you're filling, or temporarily "
+            "clear your pool to see broader suggestions."
+        )
+
+
 def _compute_confidence(rec: dict) -> int:
     """If score_breakdown is missing/partial, synthesize a confidence score."""
     sb = rec.get("score_breakdown") or {}
@@ -322,13 +378,29 @@ async def get_draft_suggestions(
     avoidance_block = build_avoidance_block(avoid_rules)
     avoid_set       = build_avoid_set(avoid_rules)
 
-    # ── Champion pool (Pro feature) ───────────────────────────────────────────
+    # ── Champion pool (Pro feature) — HARD constraint ─────────────────────────
     pool_section = ""
     if champion_pool:
+        pool_list = "\n".join(f"  • {c}" for c in champion_pool)
         pool_section = (
-            "\n\nMY CHAMPION POOL (ONLY recommend champions from this list):\n"
-            + "\n".join(f"  - {c}" for c in champion_pool)
-            + "\nIMPORTANT: Do NOT recommend any champion not in the pool above."
+            "\n\n" + "=" * 60 + "\n"
+            "🔒 CHAMPION POOL — HARD CONSTRAINT (overrides everything else)\n"
+            + "=" * 60 + "\n"
+            f"The user can ONLY play these {len(champion_pool)} champions:\n"
+            f"{pool_list}\n\n"
+            "⛔ EVERY recommendation MUST be exactly one of the champions above.\n"
+            "⛔ Suggesting ANY champion not in this list is a complete failure of\n"
+            "   the response — the user cannot play those champions and your\n"
+            "   recommendation is useless.\n"
+            "⛔ If fewer than 3 pool champions fit the role/comp/lane, return ONLY\n"
+            "   the ones that fit. It's better to return 1 good in-pool pick than\n"
+            "   3 picks the user cannot play.\n"
+            "⛔ If ZERO pool champions reasonably fit, return an EMPTY\n"
+            "   recommendations array and put a clear note in 'why_not' explaining\n"
+            "   which off-pool champions the user should add to their pool for this\n"
+            "   draft state.\n"
+            "⛔ Off-meta is fine if it's the only pool option. Off-pool is NEVER fine.\n"
+            + "=" * 60
         )
 
     # ── Build the intelligence-rich user message ──────────────────────────────
@@ -448,6 +520,10 @@ Return ONLY valid JSON, no extra text."""
 
     # ── Python-level safety filters (hard guarantees) ─────────────────────────
     _enforce_filters(result, blacklist_names, avoid_set, drafted_names, dmg["forbidden_type"])
+    # Pool enforcement runs LAST so it has the final word — recommendations
+    # that survived every other filter are still dropped if they're not in
+    # the user's explicitly-set pool.
+    _enforce_pool_filter(result, champion_pool)
 
     # ── Backfill team_analysis with deterministic values ──────────────────────
     _enrich_team_analysis(result, analysis, dmg, enemy_dmg)
