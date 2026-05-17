@@ -20,7 +20,7 @@ import re
 from groq import AsyncGroq
 
 from .lolalytics_service       import fetch_all_context, build_lolalytics_context
-from .champion_types           import analyze_team_damage
+from .champion_types           import analyze_team_damage, classify_champion
 from .composition_analyzer     import analyze_comp, build_intelligence_block
 from .avoidance_engine         import derive_avoidance, build_avoidance_block, build_avoid_set
 from .summoner_spells          import get_summoner_spells
@@ -67,7 +67,10 @@ REASONING ORDER (think through silently, then output ONLY JSON):
             (a) damage rule (forbidden_type)
             (b) avoidance rules (do not pick these)
             (c) what fills the gap from Step 1
-  Step 4 — From the filtered pool, pick 3 with DIFFERENT playstyles.
+  Step 4 — From the filtered pool, pick 3 with DIFFERENT playstyles AND
+            different fills_gap values where possible. If all viable picks fill
+            the same gap, make pick #3 a lane-dominant or meta-strong option
+            that wins through raw power rather than filling the gap.
   Step 5 — For each pick, compute score_breakdown:
             lane (40)        — how strong the lane matchup is (0-40)
             team_fit (25)    — how well it fills the ally gaps (0-25)
@@ -90,13 +93,25 @@ STRICT RULES (in priority order — the top rule wins all conflicts):
   - All reasoning must reference enemy/ally champions BY NAME.
   - If filling a gap and winning lane conflict, prioritize the GAP — explain trade-off.
 
+OUTPUT QUALITY RULES (violations destroy user trust):
+  - Each recommendation MUST have a UNIQUE reason, win_condition, and
+    early_game_plan. Never copy-paste text between recommendations — a player
+    reading all 3 should feel they got 3 distinct opinions.
+  - damage_type must reflect the champion's PRIMARY damage source in standard
+    builds (Hecarim = AD, Sejuani = Mixed, Orianna = AP). Do not label an AD
+    champion as AP or vice versa.
+  - avoid_champions must ONLY list champions viable for the role being filled.
+    Never list a mid-only champion in a jungle player's avoid list, etc.
+  - avoid_champions reasons must be factually accurate about damage types —
+    never describe an AD champion (Ezreal, Ashe, Hecarim) as "AP".
+
 AVOID_CHAMPIONS RULES (the do-not-pick list shown to users):
   - NEVER include a champion that is already in the draft (ally or enemy).
     The user can see those — saying "don't pick X" when X is already picked
     is noise that destroys trust in the tool.
-  - Only include champions the user could realistically pick but shouldn't,
-    because the enemy comp counters them, the damage profile would break,
-    or the lane matchup loses.
+  - Only include champions the user could realistically pick in their current
+    role but shouldn't, because the enemy comp counters them, the damage
+    profile would break, or the lane matchup loses.
   - 0-4 entries. If there's nothing meaningful to warn about, return [].
 
 OUTPUT — return ONLY valid JSON, zero extra text:
@@ -308,7 +323,7 @@ def _enforce_pool_filter(result: dict, champion_pool: list[str] | None) -> None:
 def _enforce_diversity(result: dict) -> None:
     """
     Remove exact duplicate champion names from recommendations and flag when
-    all picks share the same archetype (LLM ignored the diversity rule).
+    all picks share the same archetype, fills_gap, or answers_threat.
     """
     recs = result.get("recommendations")
     if not recs:
@@ -324,12 +339,60 @@ def _enforce_diversity(result: dict) -> None:
     result["recommendations"] = unique
 
     if len(unique) >= 2:
+        warnings: list[str] = []
+
         archetypes = {r.get("archetype", "") for r in unique if r.get("archetype")}
         if len(archetypes) == 1:
-            result["diversity_warning"] = (
-                f"All recommendations share the same archetype ({next(iter(archetypes))}). "
-                "Consider expanding your champion pool for more varied options."
+            warnings.append(
+                f"All recommendations share the same archetype ({next(iter(archetypes))})."
             )
+
+        gaps = [r.get("fills_gap", "") for r in unique if r.get("fills_gap")]
+        if len(gaps) == len(unique) and len(set(gaps)) == 1:
+            warnings.append(
+                f"All recommendations fill the same gap ({gaps[0]}) — "
+                "pick #3 could instead prioritise lane dominance or meta strength."
+            )
+
+        threats = [r.get("answers_threat", "") for r in unique if r.get("answers_threat")]
+        if len(threats) == len(unique) and len(set(threats)) == 1:
+            warnings.append(
+                f"All picks counter the same threat ({threats[0]})."
+            )
+
+        if warnings:
+            result["diversity_warning"] = " ".join(warnings)
+
+
+def _validate_avoid_damage_types(result: dict) -> None:
+    """
+    Remove avoid_champion entries that contain factually wrong damage-type claims.
+
+    The LLM frequently labels AD champions (Ezreal, Ashe, Hecarim) as "AP" in
+    the avoid reasons. We cross-check each entry against our deterministic
+    classify_champion() and drop entries whose reason contradicts it.
+    """
+    raw = result.get("avoid_champions")
+    if not isinstance(raw, list):
+        return
+
+    validated: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name   = item.get("champion", "")
+        reason = (item.get("reason") or "").lower()
+        det    = classify_champion(name)   # "AP", "AD", or "Mixed"
+
+        # Drop entry if reason claims AP but champion is deterministically AD
+        if det == "AD" and any(kw in reason for kw in ("ap champion", "ap damage", "magic damage", "further imbalance")):
+            continue
+        # Drop entry if reason claims AD but champion is deterministically AP
+        if det == "AP" and any(kw in reason for kw in ("ad champion", "physical damage", "ad damage")):
+            continue
+
+        validated.append(item)
+    result["avoid_champions"] = validated
 
 
 def _compute_confidence(rec: dict) -> int:
@@ -572,6 +635,9 @@ Return ONLY valid JSON, no extra text."""
     # Pass drafted set so already-picked champs are stripped from avoid_champions
     _attach_deterministic_avoidance(result, avoid_rules, drafted_names)
 
+    # ── Strip factually wrong damage-type claims from avoid list ─────────────
+    _validate_avoid_damage_types(result)
+
     # ── Confidence scoring + back-compat field aliases + spell override ──────
     if result.get("recommendations"):
         for rec in result["recommendations"]:
@@ -588,6 +654,12 @@ Return ONLY valid JSON, no extra text."""
                 role=role,
                 enemy_picks=enemy_picks,
             )
+            # LLMs hallucinate damage types (Hecarim as "AP", Ezreal as "AP").
+            # Override with deterministic classification. Only override when we
+            # have a clear AD or AP result — leave "Mixed" to the LLM.
+            det_type = classify_champion(rec.get("champion", ""))
+            if det_type != "Mixed":
+                rec["damage_type"] = det_type
 
     # ── Patch tier badges (existing OP.GG integration) ────────────────────────
     if tier_list_ref and result.get("recommendations"):

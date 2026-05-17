@@ -14,7 +14,66 @@ Output is consumed by the AI prompt and surfaced to the user.
 
 from .composition_analyzer import get_traits, T
 
-# Champion categories used for "avoid these" lists
+# ── Role-viable pools ─────────────────────────────────────────────────────────
+# Used to filter avoid lists so a jungle player never sees "don't pick Katarina"
+# and a bot player never sees "don't pick Darius". Flex picks appear in multiple.
+JUNGLE_VIABLE = {
+    "Amumu", "Bel'Veth", "Briar", "Diana", "Ekko", "Elise", "Evelynn",
+    "Fiddlesticks", "Graves", "Hecarim", "Ivern", "Jarvan IV", "Karthus",
+    "Kayn", "Kha'Zix", "Kindred", "Lee Sin", "Lillia", "Master Yi",
+    "Naafiri", "Nidalee", "Nocturne", "Nunu", "Nunu & Willump", "Poppy",
+    "Rammus", "Rek'Sai", "Rengar", "Sejuani", "Shaco", "Shyvana", "Skarner",
+    "Trundle", "Vi", "Viego", "Volibear", "Warwick", "Wukong",
+    "Xin Zhao", "Zac",
+}
+TOP_VIABLE = {
+    "Aatrox", "Ambessa", "Camille", "Cho'Gath", "Darius", "Dr. Mundo",
+    "Fiora", "Gangplank", "Garen", "Gnar", "Gragas", "Gwen", "Illaoi",
+    "Irelia", "Jax", "Jayce", "K'Sante", "Kayle", "Kennen", "Kled",
+    "Malphite", "Maokai", "Mordekaiser", "Nasus", "Olaf", "Ornn", "Pantheon",
+    "Quinn", "Renekton", "Rengar", "Riven", "Rumble", "Sett", "Shen",
+    "Singed", "Sion", "Tahm Kench", "Teemo", "Trundle", "Tryndamere",
+    "Udyr", "Urgot", "Volibear", "Warwick", "Yorick", "Yasuo", "Yone",
+}
+MID_VIABLE = {
+    "Ahri", "Akali", "Anivia", "Annie", "Aurelion Sol", "Aurora", "Azir",
+    "Cassiopeia", "Corki", "Diana", "Ekko", "Fizz", "Galio", "Heimerdinger",
+    "Hwei", "Irelia", "Kassadin", "Katarina", "LeBlanc", "Lissandra",
+    "Malzahar", "Naafiri", "Neeko", "Orianna", "Qiyana", "Ryze", "Sylas",
+    "Syndra", "Taliyah", "Talon", "Twisted Fate", "Veigar", "Vex", "Viktor",
+    "Vladimir", "Yasuo", "Yone", "Zed", "Zoe",
+}
+BOT_VIABLE = {
+    "Aphelios", "Ashe", "Caitlyn", "Draven", "Ezreal", "Jhin", "Jinx",
+    "Kai'Sa", "Kalista", "Kog'Maw", "Lucian", "Miss Fortune", "Nilah",
+    "Samira", "Senna", "Sivir", "Smolder", "Tristana", "Twitch", "Varus",
+    "Vayne", "Xayah", "Zeri",
+}
+SUPPORT_VIABLE = {
+    "Alistar", "Bard", "Blitzcrank", "Braum", "Brand", "Heimerdinger",
+    "Janna", "Karma", "Leona", "Lulu", "Lux", "Milio", "Morgana",
+    "Nami", "Nautilus", "Pyke", "Rakan", "Rell", "Renata Glasc", "Senna",
+    "Seraphine", "Sona", "Soraka", "Swain", "Tahm Kench", "Taric", "Thresh",
+    "Vel'Koz", "Xerath", "Yuumi", "Zilean", "Zyra",
+}
+ROLE_VIABLE: dict[str, set[str]] = {
+    "Top":     TOP_VIABLE,
+    "Jungle":  JUNGLE_VIABLE,
+    "Mid":     MID_VIABLE,
+    "Bot":     BOT_VIABLE,
+    "Support": SUPPORT_VIABLE,
+}
+
+
+def _filter_by_role(champions: list[str], role: str) -> list[str]:
+    """Keep only champions the user could realistically pick in their role."""
+    pool = ROLE_VIABLE.get(role)
+    if not pool:
+        return champions
+    return [c for c in champions if c in pool]
+
+
+# ── Champion categories used for "avoid these" lists ─────────────────────────
 IMMOBILE_ADCS = {
     "Jinx", "Ashe", "Kog'Maw", "Twitch", "Sivir", "Caitlyn", "Aphelios",
     "Miss Fortune", "Senna", "Varus", "Smolder",
@@ -195,7 +254,16 @@ def derive_avoidance(
                 ),
             })
 
-    return rules
+    # ── Final pass: filter every rule's champion list to the user's role ────────
+    # Prevents "don't pick Katarina" appearing for a Jungle player, "don't pick
+    # Darius" for a Bot player, etc. Rules with an empty list after filtering
+    # are dropped entirely — they'd just be noise.
+    filtered_rules: list[dict] = []
+    for rule in rules:
+        role_champs = _filter_by_role(rule["champions"], role)
+        if role_champs:
+            filtered_rules.append({**rule, "champions": role_champs})
+    return filtered_rules
 
 
 def build_avoidance_block(rules: list[dict]) -> str:
