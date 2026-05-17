@@ -247,9 +247,11 @@ def _enforce_filters(
         return True
 
     filtered = [r for r in result["recommendations"] if keep(r)]
-    # If filter wiped everything, keep originals (better than empty UI)
-    if filtered:
-        result["recommendations"] = filtered
+    # Always apply the filter. Returning fewer recommendations is correct
+    # behaviour — keeping violating picks "for a better UI" defeats the entire
+    # purpose of the blacklist/avoidance system and is the primary cause of
+    # wrong suggestions reaching the user.
+    result["recommendations"] = filtered
 
 
 def _enforce_pool_filter(result: dict, champion_pool: list[str] | None) -> None:
@@ -303,6 +305,33 @@ def _enforce_pool_filter(result: dict, champion_pool: list[str] | None) -> None:
         )
 
 
+def _enforce_diversity(result: dict) -> None:
+    """
+    Remove exact duplicate champion names from recommendations and flag when
+    all picks share the same archetype (LLM ignored the diversity rule).
+    """
+    recs = result.get("recommendations")
+    if not recs:
+        return
+
+    seen: set[str] = set()
+    unique: list[dict] = []
+    for rec in recs:
+        name = rec.get("champion", "").strip().lower()
+        if name and name not in seen:
+            seen.add(name)
+            unique.append(rec)
+    result["recommendations"] = unique
+
+    if len(unique) >= 2:
+        archetypes = {r.get("archetype", "") for r in unique if r.get("archetype")}
+        if len(archetypes) == 1:
+            result["diversity_warning"] = (
+                f"All recommendations share the same archetype ({next(iter(archetypes))}). "
+                "Consider expanding your champion pool for more varied options."
+            )
+
+
 def _compute_confidence(rec: dict) -> int:
     """If score_breakdown is missing/partial, synthesize a confidence score."""
     sb = rec.get("score_breakdown") or {}
@@ -353,7 +382,7 @@ async def get_draft_suggestions(
     blacklist_names:   set[str]  = set()
     tier_list_ref:     list      = []
 
-    if not ban_mode and enemy_picks:
+    if enemy_picks:
         try:
             enemy_data, tier_list_ref = await fetch_all_context(enemy_picks, role)
 
@@ -366,9 +395,16 @@ async def get_draft_suggestions(
             lolalytics_block = build_lolalytics_context(enemy_data, tier_list_ref, role, enemy_laner)
 
             for data in enemy_data:
-                for c in data.get("easy_matchups", []):
-                    blacklist_names.add(c["champion"].lower())
-                if enemy_laner and data["champion"].lower() == enemy_laner.lower():
+                # Blacklist only champions that lose to the DIRECT LANE OPPONENT.
+                # Applying all enemy picks' easy_matchups causes false positives for
+                # flex champions (e.g. top-lane matchup data pollutes ADC suggestions).
+                is_lane_opponent = (
+                    enemy_laner and data["champion"].lower() == enemy_laner.lower()
+                )
+                if is_lane_opponent or not enemy_laner:
+                    for c in data.get("easy_matchups", []):
+                        blacklist_names.add(c["champion"].lower())
+                if is_lane_opponent:
                     verified_counters = [c["champion"] for c in data.get("counters", [])]
         except Exception:
             pass  # Soft fail — analyzer still works
@@ -417,13 +453,15 @@ ALLY TEAM:
 ENEMY TEAM:
 {enemy_str}
 {intel_block}
+{lolalytics_block}
+{avoidance_block}
 
 WHAT I NEED: Ban phase recommendations.
 
 Prioritize banning:
 1. Champions that complete or hard-enable the enemy comp (look at enemy gaps the OTHER way).
 2. Champions that exploit our ally gaps from the intel block.
-3. Overpowered flex picks in the current meta.
+3. Overpowered flex picks in the current meta tier list.
 
 Return ONLY valid JSON."""
     else:
@@ -475,8 +513,8 @@ Return ONLY valid JSON, no extra text."""
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user",   "content": user_message},
                     ],
-                    temperature=0.7,
-                    max_tokens=1800,
+                    temperature=0.3,
+                    max_tokens=3000,
                 )
                 raw_text = response.choices[0].message.content
                 if not raw_text or not raw_text.strip():
@@ -524,6 +562,8 @@ Return ONLY valid JSON, no extra text."""
     # that survived every other filter are still dropped if they're not in
     # the user's explicitly-set pool.
     _enforce_pool_filter(result, champion_pool)
+    # Remove duplicate champion names and flag single-archetype results.
+    _enforce_diversity(result)
 
     # ── Backfill team_analysis with deterministic values ──────────────────────
     _enrich_team_analysis(result, analysis, dmg, enemy_dmg)

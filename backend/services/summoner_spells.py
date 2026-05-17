@@ -57,7 +57,8 @@ CHAMPION_SPELL_OVERRIDES: dict[str, list[str]] = {
     "Bard":       ["Flash", "Ignite"],
     "Pyke":       ["Flash", "Ignite"],
     "Senna":      ["Flash", "Ignite"],  # as a support — but if used as ADC, role override handles it
-    "Soraka":     ["Flash", "Ignite"],  # actually Heal more often, but Ignite for aggressive lanes
+    # Soraka has no override — she uses the role-default threat-aware logic:
+    # Flash+Exhaust vs dive/assassins, Flash+Ignite otherwise.
 }
 
 # Spells that should NEVER appear for a given role (sanity guard).

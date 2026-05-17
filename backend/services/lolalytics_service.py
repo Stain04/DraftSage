@@ -6,6 +6,7 @@ Caching disabled — always fetches fresh data per user request.
 """
 
 import re
+import json as _json
 import asyncio
 from typing import Optional
 import httpx
@@ -101,12 +102,70 @@ async def _fetch(url: str) -> Optional[str]:
         return None
 
 
+def _extract_next_data_matchups(html: str) -> dict[str, float]:
+    """
+    Lolalytics uses Next.js with SSR — matchup data is embedded in the initial
+    HTML as a <script id="__NEXT_DATA__"> tag. This is far more reliable than
+    trying to parse rendered text from a React SPA.
+
+    Returns {champion_name: win_rate_percent} or {} if not found.
+    """
+    m = re.search(r'<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)</script>', html)
+    if not m:
+        return {}
+    try:
+        data = _json.loads(m.group(1))
+    except Exception:
+        return {}
+
+    results: dict[str, float] = {}
+
+    def _search(obj: object) -> None:
+        """Walk the Next.js data tree looking for matchup arrays."""
+        if isinstance(obj, list) and obj and isinstance(obj[0], dict):
+            first = obj[0]
+            has_name = any(k in first for k in ("champion", "name", "championName", "key", "id"))
+            has_wr   = any(k in first for k in ("winRate", "win_rate", "wr", "wins", "win"))
+            if has_name and has_wr:
+                for item in obj:
+                    if not isinstance(item, dict):
+                        continue
+                    name = (
+                        item.get("champion") or item.get("name") or
+                        item.get("championName") or item.get("key") or ""
+                    )
+                    wr = item.get("winRate") or item.get("win_rate") or item.get("wr")
+                    if wr is None:
+                        wins  = item.get("wins") or item.get("win") or 0
+                        total = item.get("total") or item.get("games") or item.get("play") or 0
+                        wr = (wins / total) if total > 0 else None
+                    if name and wr is not None:
+                        wr_pct = float(wr) * 100 if float(wr) <= 1.0 else float(wr)
+                        results[str(name)] = wr_pct
+                return
+            for item in obj:
+                _search(item)
+        elif isinstance(obj, dict):
+            for v in obj.values():
+                _search(v)
+
+    _search(data)
+    return results
+
+
 def _parse_matchups(text: str) -> dict[str, float]:
     """
-    Parse win-rate lines from a lolalytics counter page.
-    e.g. "Caitlyn wins against Jinx 48.82% of the time"
+    Parse win-rate data from a lolalytics counter page.
+    Tries Next.js __NEXT_DATA__ JSON first (reliable), then falls back to
+    a text regex (works if SSR includes rendered matchup text).
     Returns {opponent: win_rate_for_page_champion}
     """
+    # Primary: Next.js embedded JSON — works regardless of rendering strategy
+    json_results = _extract_next_data_matchups(text)
+    if json_results:
+        return json_results
+
+    # Fallback: text pattern for "X wins against Y Z% of the time"
     pattern = re.compile(
         r"[\w'.\-& ]+?\s+wins against\s+([\w'.\-& ]+?)\s+([\d.]+)%\s+of the time",
         re.IGNORECASE,

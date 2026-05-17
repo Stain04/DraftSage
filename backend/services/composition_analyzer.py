@@ -65,13 +65,14 @@ T: dict[str, dict[str, int]] = {
     "Sion":        {"engage": 2, "hard_cc": 2, "frontline": 2, "waveclear": 1, "splitpush": 1},
     "Tahm Kench":  {"frontline": 2, "peel": 2, "engage": 1, "hard_cc": 1, "sustain": 1},
     "Teemo":       {"poke": 2, "splitpush": 2, "waveclear": 1},
-    "Trundle":     {"splitpush": 1, "dive": 1, "sustain": 1, "frontline": 1},
     "Tryndamere":  {"splitpush": 2, "sustain": 1, "scaling": 1, "dive": 1},
     "Udyr":        {"frontline": 1, "dive": 1, "splitpush": 1, "sustain": 1},
     "Urgot":       {"frontline": 1, "hard_cc": 1, "splitpush": 1, "pick": 1},
     "Volibear":    {"engage": 1, "frontline": 1, "dive": 1, "sustain": 1, "hard_cc": 1},
     "Warwick":     {"frontline": 1, "dive": 1, "sustain": 2, "hard_cc": 1},
     "Yorick":      {"splitpush": 2, "frontline": 1, "scaling": 1},
+    "Gwen":        {"frontline": 1, "sustain": 2, "splitpush": 1, "scaling": 1, "dive": 1},
+    "Heimerdinger": {"poke": 2, "waveclear": 2, "hard_cc": 1},
 
     # ── Jungle ───────────────────────────────────────────────────────────────
     "Amumu":       {"engage": 2, "hard_cc": 2, "frontline": 1},
@@ -93,7 +94,6 @@ T: dict[str, dict[str, int]] = {
     "Lee Sin":     {"engage": 1, "pick": 1, "dive": 1, "peel": 1},
     "Lillia":      {"engage": 1, "hard_cc": 2, "poke": 1, "waveclear": 1, "scaling": 1},
     "Master Yi":   {"dive": 2, "splitpush": 1, "scaling": 2},
-    "Naafiri":     {"dive": 1, "pick": 1, "splitpush": 1},
     "Nidalee":     {"poke": 2, "pick": 1, "splitpush": 1},
     "Nocturne":    {"engage": 2, "dive": 2, "pick": 1},
     "Nunu & Willump":{"engage": 1, "hard_cc": 1, "frontline": 1, "peel": 1},
@@ -110,6 +110,7 @@ T: dict[str, dict[str, int]] = {
     "Viego":       {"dive": 1, "splitpush": 1, "sustain": 1},
     "Xin Zhao":    {"engage": 2, "dive": 1, "frontline": 1, "peel": 1, "hard_cc": 1},
     "Zac":         {"engage": 2, "hard_cc": 2, "frontline": 2, "peel": 1, "sustain": 1},
+    "Wukong":      {"engage": 2, "hard_cc": 1, "frontline": 1, "dive": 1},
 
     # ── Mid ──────────────────────────────────────────────────────────────────
     "Ahri":        {"pick": 2, "poke": 1, "scaling": 1, "ranged": 2, "waveclear": 1},
@@ -122,7 +123,8 @@ T: dict[str, dict[str, int]] = {
     "Corki":       {"poke": 2, "waveclear": 1, "scaling": 1, "ranged": 2},
     "Galio":       {"engage": 2, "hard_cc": 2, "frontline": 1, "peel": 1, "disengage": 1},
     "Hwei":        {"poke": 2, "hard_cc": 1, "waveclear": 1, "disengage": 1, "ranged": 2},
-    "Irelia":      {"dive": 1, "splitpush": 2, "engage": 1, "sustain": 1},
+    "Fizz":        {"dive": 2, "pick": 1, "sustain": 1},
+    "Kassadin":    {"scaling": 2, "disengage": 1, "dive": 1},
     "Katarina":    {"dive": 2, "pick": 1, "splitpush": 1, "scaling": 1},
     "LeBlanc":     {"pick": 2, "dive": 1},
     "Lissandra":   {"engage": 2, "hard_cc": 2, "disengage": 1, "waveclear": 1, "ranged": 1},
@@ -145,6 +147,8 @@ T: dict[str, dict[str, int]] = {
     "Yone":        {"dive": 1, "splitpush": 1, "scaling": 1, "hard_cc": 1},
     "Zed":         {"dive": 2, "pick": 1, "splitpush": 1},
     "Zoe":         {"poke": 2, "pick": 1, "ranged": 2, "scaling": 1},
+    "Aurora":      {"poke": 1, "disengage": 2, "scaling": 1, "pick": 1},
+    "Heimerdinger": {"poke": 2, "waveclear": 2, "hard_cc": 1},
 
     # ── Bot (ADC) ────────────────────────────────────────────────────────────
     "Aphelios":    {"poke": 1, "scaling": 2, "ranged": 2, "waveclear": 1},

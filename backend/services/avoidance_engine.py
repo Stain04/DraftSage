@@ -136,14 +136,29 @@ def derive_avoidance(
                 ),
             })
 
-    # Rule 6 — enemy has multiple AP-heavy threats → avoid extra squishy AP picks
+    # Rule 6 — enemy has multiple melee dive/pick threats → avoid fragile AP carries
     enemy_ap_threats = sum(
         1 for p in enemy_picks
         if get_traits(p).get("dive", 0) + get_traits(p).get("pick", 0) >= 2
         and get_traits(p).get("ranged", 0) == 0
     )
-    # (Damage-balance is already enforced by champion_types; this just adds
-    # a soft warning when enemy can blow up your AP carry.)
+    if enemy_ap_threats >= 2:
+        threat_names = [
+            p.split("(")[0].strip() for p in enemy_picks
+            if get_traits(p).get("dive", 0) + get_traits(p).get("pick", 0) >= 2
+            and get_traits(p).get("ranged", 0) == 0
+        ]
+        targets = _filter_existing(all_picks, SQUISHY_BURST_MAGES | NO_ESCAPE_MAGES)
+        if targets:
+            rules.append({
+                "category": "Fragile AP carries vs melee dive",
+                "champions": targets[:5],
+                "reason": (
+                    f"Enemy has {enemy_ap_threats} melee dive/pick threats "
+                    f"({', '.join(threat_names[:3])}). "
+                    "Immobile AP carries with no escape will be one-shot before they can cast."
+                ),
+            })
 
     # Rule 7 — enemy has armor-stacking tanks (Rammus, Malphite, Tahm) → flag pure AD
     armor_stackers = {"Rammus", "Malphite", "Tahm Kench", "K'Sante", "Ornn", "Maokai"}
