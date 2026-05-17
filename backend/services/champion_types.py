@@ -1,72 +1,37 @@
 """
 Champion damage-type classification for DraftSage.
 Used to enforce AP/AD balance rules before calling the AI.
+
+Single source of truth: T in composition_analyzer.py.
+The ap field on each entry drives classification:
+  ap: 1  → "AP"
+  ap: 0  → "AD"
+  omitted → "Mixed"
 """
 
-# Champions that deal primarily MAGIC (AP) damage.
-# Hybrid/flex champions that are commonly built AP are included.
-AP_CHAMPIONS: set[str] = {
-    # Mages
-    "Ahri", "Annie", "Aurelion Sol", "Azir", "Brand", "Cassiopeia",
-    "Heimerdinger", "Karthus", "Lissandra", "Lux", "Malzahar", "Morgana",
-    "Neeko", "Orianna", "Ryze", "Seraphine", "Swain", "Syndra", "Taliyah",
-    "Twisted Fate", "Veigar", "Viktor", "Xerath", "Zyra", "Zoe",
-    "Vel'Koz", "Hwei",
-    # AP Assassins
-    "Akali", "Diana", "Ekko", "Fizz", "Katarina", "LeBlanc",
-    "Sylas", "Vex", "Naafiri",
-    # AP Bruisers / Fighters
-    "Cho'Gath", "Gragas", "Kennen", "Lillia", "Mordekaiser",
-    "Rumble", "Singed", "Vladimir",
-    # AP Supports
-    "Karma", "Lulu", "Nami", "Sona", "Soraka", "Vel'Koz",
-    "Zyra", "Zilean", "Seraphine", "Brand", "Heimerdinger",
-    "Lux",  # support Lux
-    # AP Junglers
-    "Amumu", "Elise", "Evelynn", "Fiddlesticks", "Ivern", "Nidalee", "Shyvana",
-    # AP Top
-    "Malphite", "Teemo",
-}
-
-# Champions that deal primarily PHYSICAL (AD) damage.
-AD_CHAMPIONS: set[str] = {
-    # Marksmen / ADC
-    "Ashe", "Caitlyn", "Draven", "Ezreal", "Jhin", "Jinx", "Kai'Sa",
-    "Kalista", "Kog'Maw", "Lucian", "Miss Fortune", "Sivir", "Tristana",
-    "Twitch", "Vayne", "Xayah", "Zeri", "Samira", "Nilah", "Aphelios",
-    # AD Assassins
-    "Kha'Zix", "Naafiri", "Nocturne", "Qiyana", "Rengar", "Talon", "Zed",
-    # AD Fighters / Bruisers (top)
-    "Aatrox", "Ambessa", "Camille", "Darius", "Fiora", "Garen", "Gnar",
-    "Illaoi", "Irelia", "Jayce", "Nasus", "Olaf", "Pantheon", "Renekton",
-    "Riven", "Sett", "Tryndamere", "Urgot", "Volibear", "Warwick", "Yorick",
-    # AD Junglers
-    "Briar", "Hecarim", "Jarvan IV", "Kayn", "Khazix", "Lee Sin", "Master Yi",
-    "Rengar", "Vi", "Warwick", "Xin Zhao", "Nocturne",
-    # AD Supports
-    "Blitzcrank", "Leona", "Nautilus", "Pyke", "Thresh",
-    # AD Top / flex
-    "Gangplank", "Garen", "Jax", "Nasus", "Trundle",
-}
+from .composition_analyzer import T as _T
 
 
 def classify_champion(name: str) -> str:
     """
     Classify a champion as 'AP', 'AD', or 'Mixed'.
-    Name matching is case-insensitive.
+    Derives from T's ap field. Name matching is case-insensitive.
     """
     normalized = name.strip()
-    # Strip role suffix if present, e.g. "Orianna (Mid)" → "Orianna"
     if "(" in normalized:
         normalized = normalized[:normalized.index("(")].strip()
 
-    for champ in AP_CHAMPIONS:
+    for champ, traits in _T.items():
         if champ.lower() == normalized.lower():
-            return "AP"
-    for champ in AD_CHAMPIONS:
-        if champ.lower() == normalized.lower():
-            return "AD"
-    return "Mixed"  # Unknown → treat as mixed/hybrid
+            ap = traits.get("ap", None)
+            if ap == 1:
+                return "AP"
+            elif ap == 0:
+                return "AD"
+            else:
+                return "Mixed"
+
+    return "Mixed"  # Unknown champion → treat as mixed/hybrid
 
 
 def analyze_team_damage(picks: list[str]) -> dict:

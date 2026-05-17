@@ -9,100 +9,30 @@ These rules complement the per-lane Lolalytics blacklist:
   - This engine tells us "Vayne is bad vs the *whole* enemy comp
     because they have 3 dive sources and a backline cleaner"
 
+All champion pools are derived dynamically from T (the trait database)
+using predicate functions — no hardcoded champion lists to maintain.
 Output is consumed by the AI prompt and surfaced to the user.
 """
 
-from .composition_analyzer import get_traits, T
-
-# ── Role-viable pools ─────────────────────────────────────────────────────────
-# Used to filter avoid lists so a jungle player never sees "don't pick Katarina"
-# and a bot player never sees "don't pick Darius". Flex picks appear in multiple.
-JUNGLE_VIABLE = {
-    "Amumu", "Bel'Veth", "Briar", "Diana", "Ekko", "Elise", "Evelynn",
-    "Fiddlesticks", "Graves", "Hecarim", "Ivern", "Jarvan IV", "Karthus",
-    "Kayn", "Kha'Zix", "Kindred", "Lee Sin", "Lillia", "Master Yi",
-    "Naafiri", "Nidalee", "Nocturne", "Nunu", "Nunu & Willump", "Poppy",
-    "Rammus", "Rek'Sai", "Rengar", "Sejuani", "Shaco", "Shyvana", "Skarner",
-    "Trundle", "Vi", "Viego", "Volibear", "Warwick", "Wukong",
-    "Xin Zhao", "Zac",
-}
-TOP_VIABLE = {
-    "Aatrox", "Ambessa", "Camille", "Cho'Gath", "Darius", "Dr. Mundo",
-    "Fiora", "Gangplank", "Garen", "Gnar", "Gragas", "Gwen", "Illaoi",
-    "Irelia", "Jax", "Jayce", "K'Sante", "Kayle", "Kennen", "Kled",
-    "Malphite", "Maokai", "Mordekaiser", "Nasus", "Olaf", "Ornn", "Pantheon",
-    "Quinn", "Renekton", "Rengar", "Riven", "Rumble", "Sett", "Shen",
-    "Singed", "Sion", "Tahm Kench", "Teemo", "Trundle", "Tryndamere",
-    "Udyr", "Urgot", "Volibear", "Warwick", "Yorick", "Yasuo", "Yone",
-}
-MID_VIABLE = {
-    "Ahri", "Akali", "Anivia", "Annie", "Aurelion Sol", "Aurora", "Azir",
-    "Cassiopeia", "Corki", "Diana", "Ekko", "Fizz", "Galio", "Heimerdinger",
-    "Hwei", "Irelia", "Kassadin", "Katarina", "LeBlanc", "Lissandra",
-    "Malzahar", "Naafiri", "Neeko", "Orianna", "Qiyana", "Ryze", "Sylas",
-    "Syndra", "Taliyah", "Talon", "Twisted Fate", "Veigar", "Vex", "Viktor",
-    "Vladimir", "Yasuo", "Yone", "Zed", "Zoe",
-}
-BOT_VIABLE = {
-    "Aphelios", "Ashe", "Caitlyn", "Draven", "Ezreal", "Jhin", "Jinx",
-    "Kai'Sa", "Kalista", "Kog'Maw", "Lucian", "Miss Fortune", "Nilah",
-    "Samira", "Senna", "Sivir", "Smolder", "Tristana", "Twitch", "Varus",
-    "Vayne", "Xayah", "Zeri",
-}
-SUPPORT_VIABLE = {
-    "Alistar", "Bard", "Blitzcrank", "Braum", "Brand", "Heimerdinger",
-    "Janna", "Karma", "Leona", "Lulu", "Lux", "Milio", "Morgana",
-    "Nami", "Nautilus", "Pyke", "Rakan", "Rell", "Renata Glasc", "Senna",
-    "Seraphine", "Sona", "Soraka", "Swain", "Tahm Kench", "Taric", "Thresh",
-    "Vel'Koz", "Xerath", "Yuumi", "Zilean", "Zyra",
-}
-ROLE_VIABLE: dict[str, set[str]] = {
-    "Top":     TOP_VIABLE,
-    "Jungle":  JUNGLE_VIABLE,
-    "Mid":     MID_VIABLE,
-    "Bot":     BOT_VIABLE,
-    "Support": SUPPORT_VIABLE,
-}
+from .composition_analyzer import T, get_traits
 
 
-def _filter_by_role(champions: list[str], role: str) -> list[str]:
-    """Keep only champions the user could realistically pick in their role."""
-    pool = ROLE_VIABLE.get(role)
-    if not pool:
-        return champions
-    return [c for c in champions if c in pool]
-
-
-# ── Champion categories used for "avoid these" lists ─────────────────────────
-IMMOBILE_ADCS = {
-    "Jinx", "Ashe", "Kog'Maw", "Twitch", "Sivir", "Caitlyn", "Aphelios",
-    "Miss Fortune", "Senna", "Varus", "Smolder",
-}
-
-MELEE_CARRIES = {
-    "Yasuo", "Yone", "Samira", "Tryndamere", "Master Yi", "Vayne",
-    "Nilah", "Sett", "Irelia", "Riven", "Katarina", "Fiora",
-}
-
-LOW_RANGE_BRUISERS = {
-    "Darius", "Garen", "Sett", "Volibear", "Olaf", "Trundle",
-    "Warwick", "Renekton", "Aatrox", "Mordekaiser",
-}
-
-SQUISHY_BURST_MAGES = {
-    "Veigar", "Annie", "Syndra", "Lux", "Brand", "Xerath", "Vel'Koz",
-    "Zoe", "LeBlanc", "Vex", "Hwei",
-}
-
-NO_ESCAPE_MAGES = {
-    "Karthus", "Annie", "Veigar", "Brand", "Xerath", "Vel'Koz",
-    "Cassiopeia", "Anivia", "Aurelion Sol", "Malzahar",
-}
-
-DIVE_ASSASSINS = {
-    "Zed", "Talon", "Katarina", "Akali", "Qiyana", "Kha'Zix",
-    "Rengar", "Evelynn", "Naafiri", "Kayn",
-}
+def _champs_matching(predicate, role: str | None = None) -> set[str]:
+    """
+    Return all champions in T where predicate(traits) is True.
+    If role is given, only return champions whose 'roles' list includes it.
+    Champions with empty or missing 'roles' are included when role is None.
+    """
+    result: set[str] = set()
+    for champ, traits in T.items():
+        if role is not None and role not in traits.get("roles", []):
+            continue
+        try:
+            if predicate(traits):
+                result.add(champ)
+        except Exception:
+            pass
+    return result
 
 
 def _filter_existing(picks: list[str], champions: set[str]) -> list[str]:
@@ -121,16 +51,26 @@ def derive_avoidance(
     Return a list of {category, champions, reason} dicts describing
     champion groups to avoid given the enemy comp.
 
+    All champion pools are computed dynamically from T — no hardcoded sets.
     Only emits rules when a real threat exists (no noise).
     """
     rules: list[dict] = []
     ep = analysis["enemy_profile"]
     all_picks = ally_picks + enemy_picks
 
-    # Rule 1 — enemy has heavy dive → avoid immobile ADCs
+    # Rule 1 — enemy heavy dive → avoid immobile carries in bot lane
+    # Immobile carry: ranged + scaling + no disengage + no self-peel
     if role == "Bot" and ep["dive"] >= 3:
         divers = [p for p in enemy_picks if get_traits(p).get("dive", 0) >= 1]
-        targets = _filter_existing(all_picks, IMMOBILE_ADCS)
+        pool = _champs_matching(
+            lambda t: t.get("ranged", 0) >= 2
+                      and t.get("scaling", 0) >= 1
+                      and t.get("disengage", 0) == 0
+                      and t.get("dive", 0) == 0
+                      and t.get("peel", 0) == 0,
+            role="Bot",
+        )
+        targets = _filter_existing(all_picks, pool)
         if targets:
             rules.append({
                 "category": "Immobile ADCs",
@@ -141,10 +81,18 @@ def derive_avoidance(
                 ),
             })
 
-    # Rule 2 — enemy CC chain → avoid squishy no-escape mages & melee carries
+    # Rule 2 — enemy CC chain → avoid low-mobility squishies
+    # Low-mobility squishy: no disengage, no high dive, not a frontliner
     if ep["hard_cc"] >= 6:
         cc_sources = [p for p in enemy_picks if get_traits(p).get("hard_cc", 0) >= 2]
-        targets = _filter_existing(all_picks, NO_ESCAPE_MAGES | MELEE_CARRIES)
+        pool = _champs_matching(
+            lambda t: t.get("disengage", 0) == 0
+                      and t.get("dive", 0) <= 1
+                      and t.get("frontline", 0) == 0
+                      and t.get("peel", 0) == 0,
+            role=role,
+        )
+        targets = _filter_existing(all_picks, pool)
         if targets:
             rules.append({
                 "category": "Low-mobility squishies",
@@ -155,10 +103,17 @@ def derive_avoidance(
                 ),
             })
 
-    # Rule 3 — enemy heavy poke → avoid melee bruisers/carries with no engage
+    # Rule 3 — enemy heavy poke + no ally engage → avoid short-range melee
+    # Short-range melee: no ranged, no poke of own, no engage
     if ep["poke"] >= 4 and analysis["ally_profile"]["engage"] <= 1:
         pokers = [p for p in enemy_picks if get_traits(p).get("poke", 0) >= 2]
-        targets = _filter_existing(all_picks, LOW_RANGE_BRUISERS | MELEE_CARRIES)
+        pool = _champs_matching(
+            lambda t: t.get("ranged", 0) == 0
+                      and t.get("poke", 0) == 0
+                      and t.get("engage", 0) <= 1,
+            role=role,
+        )
+        targets = _filter_existing(all_picks, pool)
         if targets:
             rules.append({
                 "category": "Low-range / melee with no engage support",
@@ -169,9 +124,16 @@ def derive_avoidance(
                 ),
             })
 
-    # Rule 4 — enemy heavy disengage/peel → avoid all-in melee carries
+    # Rule 4 — enemy heavy peel/disengage → avoid all-in melee carries
+    # All-in melee carry: diver or split-pusher, no ranged, no frontline
     if ep["disengage"] + ep["peel"] >= 4 and role in ("Bot", "Mid", "Top"):
-        targets = _filter_existing(all_picks, MELEE_CARRIES)
+        pool = _champs_matching(
+            lambda t: t.get("ranged", 0) == 0
+                      and (t.get("dive", 0) >= 1 or t.get("splitpush", 0) >= 1)
+                      and t.get("frontline", 0) == 0,
+            role=role,
+        )
+        targets = _filter_existing(all_picks, pool)
         if targets:
             rules.append({
                 "category": "All-in melee carries",
@@ -182,9 +144,16 @@ def derive_avoidance(
                 ),
             })
 
-    # Rule 5 — enemy has strong frontline/tank stacking → avoid pure burst assassins
+    # Rule 5 — enemy heavy frontline → avoid pure-burst assassins
+    # Pure burst assassin: high dive/pick, no frontline, not a poke champion
     if ep["frontline"] >= 5 and role in ("Mid", "Jungle"):
-        targets = _filter_existing(all_picks, DIVE_ASSASSINS)
+        pool = _champs_matching(
+            lambda t: (t.get("dive", 0) + t.get("pick", 0)) >= 3
+                      and t.get("frontline", 0) == 0
+                      and t.get("poke", 0) == 0,
+            role=role,
+        )
+        targets = _filter_existing(all_picks, pool)
         if targets:
             rules.append({
                 "category": "Pure-burst assassins",
@@ -195,7 +164,7 @@ def derive_avoidance(
                 ),
             })
 
-    # Rule 6 — enemy has multiple melee dive/pick threats → avoid fragile AP carries
+    # Rule 6 — multiple melee dive/pick threats → avoid fragile immobile AP carries
     enemy_ap_threats = sum(
         1 for p in enemy_picks
         if get_traits(p).get("dive", 0) + get_traits(p).get("pick", 0) >= 2
@@ -207,7 +176,17 @@ def derive_avoidance(
             if get_traits(p).get("dive", 0) + get_traits(p).get("pick", 0) >= 2
             and get_traits(p).get("ranged", 0) == 0
         ]
-        targets = _filter_existing(all_picks, SQUISHY_BURST_MAGES | NO_ESCAPE_MAGES)
+        # Fragile AP carry: AP damage, ranged, scaling, no escape (no disengage/dive/peel)
+        pool = _champs_matching(
+            lambda t: t.get("ap", -1) == 1
+                      and t.get("ranged", 0) >= 2
+                      and t.get("scaling", 0) >= 1
+                      and t.get("disengage", 0) == 0
+                      and t.get("dive", 0) == 0
+                      and t.get("peel", 0) == 0,
+            role=role,
+        )
+        targets = _filter_existing(all_picks, pool)
         if targets:
             rules.append({
                 "category": "Fragile AP carries vs melee dive",
@@ -219,14 +198,18 @@ def derive_avoidance(
                 ),
             })
 
-    # Rule 7 — enemy has armor-stacking tanks (Rammus, Malphite, Tahm) → flag pure AD
+    # Rule 7 — enemy stacks armor tanks → flag pure AD scalers
+    # Pure AD scaler: ap field is 0, scaling >= 1, no AP damage
     armor_stackers = {"Rammus", "Malphite", "Tahm Kench", "K'Sante", "Ornn", "Maokai"}
     enemy_armor = [p for p in enemy_picks if p.split("(")[0].strip() in armor_stackers]
     if len(enemy_armor) >= 2:
-        # Identify pure AD scalers we'd want to avoid doubling-down on
-        pure_ad = {"Tryndamere", "Master Yi", "Vayne", "Yasuo", "Yone",
-                   "Aatrox", "Olaf", "Garen", "Nasus"}
-        targets = _filter_existing(all_picks, pure_ad)
+        pool = _champs_matching(
+            lambda t: t.get("ap", -1) == 0
+                      and t.get("scaling", 0) >= 1
+                      and t.get("ranged", 0) == 0,  # melee AD scalers hurt most
+            role=role,
+        )
+        targets = _filter_existing(all_picks, pool)
         if targets:
             rules.append({
                 "category": "Pure-AD scalers vs armor stack",
@@ -237,13 +220,16 @@ def derive_avoidance(
                 ),
             })
 
-    # Rule 8 — enemy has MR-stacking mages/tanks → flag pure AP scalers
+    # Rule 8 — enemy stacks MR tanks → flag pure AP scalers
     mr_stackers = {"Galio", "Kassadin", "Sion", "Sett", "Maokai"}
     enemy_mr = [p for p in enemy_picks if p.split("(")[0].strip() in mr_stackers]
     if len(enemy_mr) >= 2:
-        pure_ap = {"Veigar", "Karthus", "Vladimir", "Cassiopeia", "Kassadin",
-                   "Aurelion Sol", "Ryze"}
-        targets = _filter_existing(all_picks, pure_ap)
+        pool = _champs_matching(
+            lambda t: t.get("ap", -1) == 1
+                      and t.get("scaling", 0) >= 2,
+            role=role,
+        )
+        targets = _filter_existing(all_picks, pool)
         if targets:
             rules.append({
                 "category": "Pure-AP scalers vs MR stack",
@@ -254,16 +240,7 @@ def derive_avoidance(
                 ),
             })
 
-    # ── Final pass: filter every rule's champion list to the user's role ────────
-    # Prevents "don't pick Katarina" appearing for a Jungle player, "don't pick
-    # Darius" for a Bot player, etc. Rules with an empty list after filtering
-    # are dropped entirely — they'd just be noise.
-    filtered_rules: list[dict] = []
-    for rule in rules:
-        role_champs = _filter_by_role(rule["champions"], role)
-        if role_champs:
-            filtered_rules.append({**rule, "champions": role_champs})
-    return filtered_rules
+    return rules
 
 
 def build_avoidance_block(rules: list[dict]) -> str:
