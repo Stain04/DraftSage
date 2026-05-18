@@ -17,7 +17,12 @@ import json
 import os
 import re
 
-from anthropic import AsyncAnthropic
+try:
+    from anthropic import AsyncAnthropic
+    _ANTHROPIC_AVAILABLE = True
+except ImportError:
+    _ANTHROPIC_AVAILABLE = False
+
 from groq import AsyncGroq
 
 from .lolalytics_service       import fetch_all_context, build_lolalytics_context
@@ -38,7 +43,10 @@ for i in range(1, 11):
     if key:
         GROQ_API_KEYS.append(key)
 
+# DeepSeek R1 distill first — it's a reasoning model and handles complex
+# multi-constraint prompts far better than vanilla Llama 70B.
 GROQ_MODELS = [
+    "deepseek-r1-distill-llama-70b",
     "llama-3.3-70b-versatile",
     "llama3-70b-8192",
     "llama-3.1-8b-instant",
@@ -706,8 +714,8 @@ Return ONLY valid JSON, no extra text."""
     raw_text   = None
     last_error = None
 
-    # 1) Try Claude Haiku 4.5 via Anthropic API
-    if ANTHROPIC_API_KEY:
+    # 1) Try Claude Haiku 4.5 via Anthropic API (optional — requires key + package)
+    if ANTHROPIC_API_KEY and _ANTHROPIC_AVAILABLE:
         try:
             client   = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
             response = await client.messages.create(
@@ -763,6 +771,9 @@ Return ONLY valid JSON, no extra text."""
 
     if raw_text is None:
         raise last_error or RuntimeError("All LLM providers exhausted.")
+
+    # ── Strip DeepSeek R1 <think> block (appears before the JSON) ────────────
+    raw_text = re.sub(r"<think>[\s\S]*?</think>", "", raw_text, flags=re.IGNORECASE).strip()
 
     # ── Robust JSON extraction ────────────────────────────────────────────────
     if "```" in raw_text:
