@@ -17,6 +17,7 @@ import json
 import os
 import re
 
+from anthropic import AsyncAnthropic
 from groq import AsyncGroq
 
 from .lolalytics_service       import fetch_all_context, build_lolalytics_context
@@ -25,16 +26,19 @@ from .composition_analyzer     import analyze_comp, build_intelligence_block
 from .avoidance_engine         import derive_avoidance, build_avoidance_block, build_avoid_set
 from .summoner_spells          import get_summoner_spells
 
-# ── API Keys (pool for rotation) ─────────────────────────────────────────────
-API_KEYS: list[str] = []
+# ── Primary: Anthropic (Claude Haiku 4.5) ────────────────────────────────────
+ANTHROPIC_API_KEY: str = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+ANTHROPIC_MODEL   = "claude-haiku-4-5-20251001"
+
+# ── Fallback: Groq (used only when Anthropic is unavailable) ─────────────────
+GROQ_API_KEYS: list[str] = []
 for i in range(1, 11):
     suffix = "" if i == 1 else f"_{i}"
     key = os.environ.get(f"GROQ_API_KEY{suffix}", "").strip()
     if key:
-        API_KEYS.append(key)
+        GROQ_API_KEYS.append(key)
 
-# ── Model fallback chain ──────────────────────────────────────────────────────
-MODELS = [
+GROQ_MODELS = [
     "llama-3.3-70b-versatile",
     "llama3-70b-8192",
     "llama-3.1-8b-instant",
@@ -698,44 +702,67 @@ ENEMY TEAM:
 Now execute the 6-step reasoning order from the system prompt.
 Return ONLY valid JSON, no extra text."""
 
-    # ── Call Groq with key + model fallback ───────────────────────────────────
-    if not API_KEYS:
-        raise RuntimeError("No GROQ_API_KEY found. Set at least one API key in environment variables.")
-
+    # ── LLM call: Anthropic primary → Groq fallback ──────────────────────────
     raw_text   = None
     last_error = None
 
-    for api_key in API_KEYS:
-        for model in MODELS:
-            try:
-                client = AsyncGroq(api_key=api_key)
-                response = await client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user",   "content": user_message},
-                    ],
-                    temperature=0.3,
-                    max_tokens=3000,
-                )
-                raw_text = response.choices[0].message.content
-                if not raw_text or not raw_text.strip():
-                    last_error = RuntimeError("Groq returned empty content.")
-                    raw_text = None
-                    continue
-                raw_text = raw_text.strip()
+    # 1) Try Claude Haiku 4.5 via Anthropic API
+    if ANTHROPIC_API_KEY:
+        try:
+            client   = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+            response = await client.messages.create(
+                model      = ANTHROPIC_MODEL,
+                max_tokens = 3000,
+                temperature= 0.3,
+                system     = SYSTEM_PROMPT,
+                messages   = [{"role": "user", "content": user_message}],
+            )
+            raw_text = response.content[0].text.strip() if response.content else None
+            if not raw_text:
+                last_error = RuntimeError("Anthropic returned empty content.")
+                raw_text   = None
+        except Exception as e:
+            last_error = e
+            raw_text   = None   # fall through to Groq
+
+    # 2) Groq fallback (used when ANTHROPIC_API_KEY is unset or Anthropic fails)
+    if raw_text is None:
+        if not GROQ_API_KEYS:
+            raise RuntimeError(
+                "No ANTHROPIC_API_KEY and no GROQ_API_KEY found. "
+                "Set at least one API key in environment variables."
+            )
+        for api_key in GROQ_API_KEYS:
+            for model in GROQ_MODELS:
+                try:
+                    client   = AsyncGroq(api_key=api_key)
+                    response = await client.chat.completions.create(
+                        model    = model,
+                        messages = [
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user",   "content": user_message},
+                        ],
+                        temperature = 0.3,
+                        max_tokens  = 3000,
+                    )
+                    raw_text = response.choices[0].message.content
+                    if not raw_text or not raw_text.strip():
+                        last_error = RuntimeError("Groq returned empty content.")
+                        raw_text   = None
+                        continue
+                    raw_text = raw_text.strip()
+                    break
+                except Exception as e:
+                    last_error = e
+                    err = str(e)
+                    if any(x in err for x in ("rate_limit_exceeded", "429", "model_decommissioned", "model_not_found")):
+                        continue
+                    raise
+            if raw_text is not None:
                 break
-            except Exception as e:
-                last_error = e
-                err = str(e)
-                if any(x in err for x in ("rate_limit_exceeded", "429", "model_decommissioned", "model_not_found")):
-                    continue
-                raise
-        if raw_text is not None:
-            break
 
     if raw_text is None:
-        raise last_error or RuntimeError("All Groq API keys exhausted.")
+        raise last_error or RuntimeError("All LLM providers exhausted.")
 
     # ── Robust JSON extraction ────────────────────────────────────────────────
     if "```" in raw_text:
