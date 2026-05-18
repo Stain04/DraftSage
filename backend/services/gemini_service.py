@@ -18,7 +18,7 @@ import os
 import re
 
 try:
-    from anthropic import AsyncAnthropic
+    from anthropic import AsyncAnthropicBedrock
     _ANTHROPIC_AVAILABLE = True
 except ImportError:
     _ANTHROPIC_AVAILABLE = False
@@ -31,9 +31,11 @@ from .composition_analyzer     import analyze_comp, build_intelligence_block
 from .avoidance_engine         import derive_avoidance, build_avoidance_block, build_avoid_set
 from .summoner_spells          import get_summoner_spells
 
-# ── Primary: Anthropic (Claude Haiku 4.5) ────────────────────────────────────
-ANTHROPIC_API_KEY: str = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-ANTHROPIC_MODEL   = "claude-haiku-4-5-20251001"
+# ── Primary: Claude Haiku 4.5 via AWS Bedrock ────────────────────────────────
+AWS_ACCESS_KEY_ID     = os.environ.get("AWS_ACCESS_KEY_ID", "").strip()
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "").strip()
+AWS_REGION            = os.environ.get("AWS_REGION", "us-east-2").strip()
+BEDROCK_MODEL         = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 # ── Fallback: Groq (used only when Anthropic is unavailable) ─────────────────
 GROQ_API_KEYS: list[str] = []
@@ -714,12 +716,16 @@ Return ONLY valid JSON, no extra text."""
     raw_text   = None
     last_error = None
 
-    # 1) Try Claude Haiku 4.5 via Anthropic API (optional — requires key + package)
-    if ANTHROPIC_API_KEY and _ANTHROPIC_AVAILABLE:
+    # 1) Try Claude Haiku 4.5 via AWS Bedrock (optional — requires IAM credentials)
+    if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and _ANTHROPIC_AVAILABLE:
         try:
-            client   = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+            client = AsyncAnthropicBedrock(
+                aws_access_key=AWS_ACCESS_KEY_ID,
+                aws_secret_key=AWS_SECRET_ACCESS_KEY,
+                aws_region=AWS_REGION,
+            )
             response = await client.messages.create(
-                model      = ANTHROPIC_MODEL,
+                model      = BEDROCK_MODEL,
                 max_tokens = 3000,
                 temperature= 0.3,
                 system     = SYSTEM_PROMPT,
@@ -727,9 +733,12 @@ Return ONLY valid JSON, no extra text."""
             )
             raw_text = response.content[0].text.strip() if response.content else None
             if not raw_text:
-                last_error = RuntimeError("Anthropic returned empty content.")
+                last_error = RuntimeError("Bedrock returned empty content.")
                 raw_text   = None
+            else:
+                print(f"[DraftSage] LLM: Claude Haiku 4.5 (Bedrock / {AWS_REGION})", flush=True)
         except Exception as e:
+            print(f"[DraftSage] Bedrock failed: {e} — falling back to Groq", flush=True)
             last_error = e
             raw_text   = None   # fall through to Groq
 
@@ -757,6 +766,8 @@ Return ONLY valid JSON, no extra text."""
                     if not raw_text or not raw_text.strip():
                         last_error = RuntimeError("Groq returned empty content.")
                         raw_text   = None
+                    else:
+                        print(f"[DraftSage] LLM: {model} (Groq)", flush=True)
                         continue
                     raw_text = raw_text.strip()
                     break
