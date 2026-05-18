@@ -51,33 +51,40 @@ You receive THREE layers of pre-computed intelligence in every user message:
 
 You MUST treat these layers as authoritative ground truth. Your job is NOT to
 guess matchups from memory — it is to synthesize the structured intelligence
-into a great pick that:
-
-  1. Fills the TOP CRITICAL GAP in the ally comp (from B).
-  2. Counters at least one of the HIGH-severity enemy threats (from B).
-  3. Wins the lane matchup (in the LOLALYTICS counter pool from C).
-  4. Is NOT in any blacklist (lane blacklist from C, avoidance list from D).
-  5. Respects the AP/AD damage rule (from A).
+into a great pick.
 
 REASONING ORDER (think through silently, then output ONLY JSON):
 
-  Step 1 — Read the ally gaps. What axes does the next pick MUST address?
+  Step 1 — Read the ally gaps. What does the next pick MUST bring?
   Step 2 — Read the enemy threats. What does the next pick MUST counter?
-  Step 3 — Filter the lane-counter pool by:
-            (a) damage rule (forbidden_type)
-            (b) avoidance rules (do not pick these)
-            (c) what fills the gap from Step 1
-  Step 4 — From the filtered pool, pick 3 with DIFFERENT playstyles AND
-            different fills_gap values where possible. If all viable picks fill
-            the same gap, make pick #3 a lane-dominant or meta-strong option
-            that wins through raw power rather than filling the gap.
+  Step 3 — Build your candidate pool (ALL THREE are valid sources):
+            SOURCE A: LOLALYTICS COUNTER POOL — champions verified to WIN lane
+                       on current patch data. These score high on lane (0-40).
+                       Prioritise these IF they also address a gap or threat.
+            SOURCE B: GAP-FILLING CANDIDATES — role-viable champions that
+                       directly address the top critical gap(s). A champion
+                       that fills a critical gap AND wins lane is ideal. A
+                       champion that fills a critical gap but loses lane can
+                       still be pick #2 or #3 — team_fit(25)+threat_answer(20)
+                       can outweigh lane(40) when the gap is severe.
+            SOURCE C: ROLE-VIABLE POOL (ROLE LOCK list) — any champion on that
+                       list is a valid suggestion if it fits the situation better
+                       than the other sources. Do NOT ignore this pool. Explore
+                       the full list — niche picks, off-meta options, and
+                       champions not commonly seen are valid when they fit.
+            FILTER OUT from all sources: forbidden damage type, avoidance list,
+            lane blacklist, already drafted champions.
+  Step 4 — From the filtered candidates, pick 3 with DIFFERENT archetypes and
+            different fills_gap values. NEVER suggest the same champion twice.
+            Make each recommendation feel like a genuinely different option:
+            one lane-dominant, one gap-filling, one meta/utility pick.
   Step 5 — For each pick, compute score_breakdown:
-            lane (40)        — how strong the lane matchup is (0-40)
-            team_fit (25)    — how well it fills the ally gaps (0-25)
-            threat_answer(20)— how well it counters enemy threats (0-20)
-            meta (15)        — current patch tier (0-15)
+            lane (40)         — counter pool presence + lane matchup strength
+            team_fit (25)     — how well it fills the ally gaps
+            threat_answer (20)— how well it counters enemy threats
+            meta (15)         — current patch tier / strength
             Sum gives confidence (0-100).
-  Step 6 — Write tight reasoning that names specific ally + enemy champions.
+  Step 6 — Write tight, role-specific reasoning naming actual ally/enemy champs.
 
 STRICT RULES (in priority order — RULE #1 overrides EVERYTHING):
 
@@ -181,6 +188,27 @@ def _format_team(picks: list[str]) -> str:
     if not picks:
         return "  (none yet)"
     return "\n".join(f"  - {p}" for p in picks)
+
+
+def _build_gap_filling_pool(analysis: dict, role: str) -> dict[str, list[str]]:
+    """
+    For each critical/soft gap in the ally comp, return T-known champions in
+    this role that strongly address it (score >= 2 on that axis).
+    Gives the LLM concrete options beyond the Lolalytics counter pool.
+    """
+    from .composition_analyzer import T as _T
+    gaps = analysis.get("ally_gaps", [])
+    out: dict[str, list[str]] = {}
+    for gap in gaps[:3]:
+        axis  = gap["axis"]
+        label = gap["name"]
+        champs = sorted(
+            c for c, t in _T.items()
+            if role in t.get("roles", []) and t.get(axis, 0) >= 2
+        )
+        if champs:
+            out[label] = champs
+    return out
 
 
 def _build_role_pool(role: str) -> list[str]:
@@ -607,9 +635,27 @@ Return ONLY valid JSON."""
         counter_pool_section = ""
         if verified_counters:
             counter_pool_section = (
-                "\n\n🎯 LOLALYTICS LANE-COUNTER POOL — these WIN the lane on this patch:\n"
+                "\n\n🏆 LOLALYTICS LANE-COUNTER POOL — verified to WIN lane on current patch:\n"
                 f"   {', '.join(verified_counters)}\n"
-                "   Cross-reference with the gaps + avoidance intel above before picking."
+                "   These earn the highest lane score (up to 40). Prioritise them WHEN they\n"
+                "   also fill a gap or counter a threat — but do NOT restrict yourself to\n"
+                "   this list. A champion outside this pool that fills a CRITICAL GAP is\n"
+                "   often a better pick than a pure lane counter that adds nothing to the comp."
+            )
+
+        # Gap-filling candidates — role-viable champions that directly address gaps
+        gap_pool     = _build_gap_filling_pool(analysis, role)
+        gap_sections = []
+        for gap_label, champs in gap_pool.items():
+            gap_sections.append(f"  {gap_label}: {', '.join(champs)}")
+        gap_pool_block = ""
+        if gap_sections:
+            gap_pool_block = (
+                "\n\n🔧 GAP-FILLING CANDIDATES (role-viable, score >=2 on missing axis):\n"
+                + "\n".join(gap_sections) + "\n"
+                "   These address your comp's critical gaps. Consider them even if they are\n"
+                "   NOT in the Lolalytics counter pool — gap-filling often wins games more\n"
+                "   reliably than a pure lane counter that ignores team needs."
             )
 
         role_pool        = _build_role_pool(role)
@@ -630,7 +676,7 @@ Return ONLY valid JSON."""
 
         user_message = f"""{dmg['hard_rule']}
 {intel_block}
-{lolalytics_block}{counter_pool_section}
+{lolalytics_block}{counter_pool_section}{gap_pool_block}
 {avoidance_block}
 {role_pool_block}
 
