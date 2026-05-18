@@ -105,14 +105,12 @@ OUTPUT QUALITY RULES (violations destroy user trust):
   - avoid_champions reasons must be factually accurate about damage types —
     never describe an AD champion (Ezreal, Ashe, Hecarim) as "AP".
 
-AVOID_CHAMPIONS RULES (the do-not-pick list shown to users):
-  - NEVER include a champion that is already in the draft (ally or enemy).
-    The user can see those — saying "don't pick X" when X is already picked
-    is noise that destroys trust in the tool.
-  - Only include champions the user could realistically pick in their current
-    role but shouldn't, because the enemy comp counters them, the damage
-    profile would break, or the lane matchup loses.
-  - 0-4 entries. If there's nothing meaningful to warn about, return [].
+AVOID_CHAMPIONS + WHY_NOT — these two fields are computed server-side from
+  deterministic analysis. You MUST return empty defaults for both:
+    "avoid_champions": []
+    "why_not": ""
+  Do NOT populate them. Any content you generate here will be discarded and
+  replaced with verified data. This prevents wrong damage-type claims in the UI.
 
 OUTPUT — return ONLY valid JSON, zero extra text:
 {
@@ -150,16 +148,14 @@ OUTPUT — return ONLY valid JSON, zero extra text:
     "missing_from_ally": ["Gap1", "Gap2"],
     "enemy_win_condition": "1 sentence: how the enemy wins if you don't adapt"
   },
-  "avoid_champions": [
-    {"champion": "Name", "reason": "Why this specific champion is bad here"}
-  ],
+  "avoid_champions": [],
   "key_threats": ["EnemyName1", "EnemyName2"],
   "team_win_condition": "Your team's path to victory given the chosen pick",
   "composition_type": "engage|poke|teamfight|splitpush|pick|protect|dive|scaling|balanced",
   "power_curve": "early|mid|late|scaling",
   "draft_grade": "A|B|C",
   "draft_grade_reason": "Brief: why this grade",
-  "why_not": "Brief summary of which archetypes to avoid and why (1-2 sentences)"
+  "why_not": ""
 }"""
 
 
@@ -198,44 +194,60 @@ def _attach_deterministic_avoidance(
     drafted: set[str],
 ) -> None:
     """
-    Merge deterministic avoid rules into result.avoid_champions.
+    Replace result.avoid_champions entirely with our deterministic engine output.
 
-    Also filters out any champion that is already in the draft — telling the
-    user "don't pick Aatrox" when Aatrox is on their team is just noise.
+    LLM-generated avoid_champions entries are discarded — the LLM frequently
+    misclassifies champion damage types (calling AP champions "AD") and
+    recommends avoiding champions the team actually needs. The deterministic
+    avoidance engine is authoritative and contains no hallucinations.
     """
-    raw = result.get("avoid_champions") or []
-    if not isinstance(raw, list):
-        raw = []
-
-    # Step 1 — drop any LLM-generated entries that reference drafted champions
-    existing: list[dict] = []
+    entries: list[dict] = []
     seen: set[str] = set()
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        name = (item.get("champion") or "").strip()
-        key  = name.lower()
-        if not key or key in drafted or key in seen:
-            continue
-        existing.append(item)
-        seen.add(key)
 
-    # Step 2 — append deterministic rules, also filtering drafted champions
-    added = 0
     for rule in avoid_rules:
         for champ in rule["champions"]:
             key = champ.lower()
             if key in drafted or key in seen:
                 continue
-            existing.append({"champion": champ, "reason": rule["reason"]})
+            entries.append({"champion": champ, "reason": rule["reason"]})
             seen.add(key)
-            added += 1
-            if added >= 6:
+            if len(entries) >= 6:
                 break
-        if added >= 6:
+        if len(entries) >= 6:
             break
 
-    result["avoid_champions"] = existing
+    result["avoid_champions"] = entries
+
+
+def _build_why_not_deterministic(dmg: dict, avoid_rules: list[dict]) -> str:
+    """
+    Build the why_not explanation from deterministic damage constraints and
+    avoidance rules — no LLM-generated champion names or damage-type claims.
+    """
+    parts: list[str] = []
+
+    if dmg["forbidden_type"] != "None":
+        parts.append(
+            f"Avoid {dmg['forbidden_type']} champions - your team is already "
+            f"{dmg['label']} ({dmg['ap_count']} AP / {dmg['ad_count']} AD). "
+            f"The enemy buys one resistance item and shuts down your entire damage output."
+        )
+
+    if avoid_rules:
+        categories = [r["category"] for r in avoid_rules[:2]]
+        connector  = " and " if len(categories) == 2 else ", "
+        parts.append(
+            f"Against this enemy comp, also avoid {connector.join(categories)} - "
+            f"see the Avoid panel for details."
+        )
+
+    if not parts:
+        return (
+            "No damage-type restrictions this draft - "
+            "focus on gap-filling and winning your lane matchup."
+        )
+
+    return " ".join(parts)
 
 
 def _enforce_filters(
@@ -631,11 +643,13 @@ Return ONLY valid JSON, no extra text."""
     # ── Backfill team_analysis with deterministic values ──────────────────────
     _enrich_team_analysis(result, analysis, dmg, enemy_dmg)
 
-    # ── Attach deterministic avoidance rules ──────────────────────────────────
-    # Pass drafted set so already-picked champs are stripped from avoid_champions
+    # ── Attach deterministic avoidance rules (LLM entries discarded) ─────────
     _attach_deterministic_avoidance(result, avoid_rules, drafted_names)
 
-    # ── Strip factually wrong damage-type claims from avoid list ─────────────
+    # ── why_not: overwrite LLM value with deterministic explanation ──────────
+    result["why_not"] = _build_why_not_deterministic(dmg, avoid_rules)
+
+    # ── Strip any residual wrong damage-type claims (defensive pass) ─────────
     _validate_avoid_damage_types(result)
 
     # ── Confidence scoring + back-compat field aliases + spell override ──────
