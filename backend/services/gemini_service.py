@@ -79,29 +79,45 @@ REASONING ORDER (think through silently, then output ONLY JSON):
             Sum gives confidence (0-100).
   Step 6 — Write tight reasoning that names specific ally + enemy champions.
 
-STRICT RULES (in priority order — the top rule wins all conflicts):
-  - If a CHAMPION POOL is supplied, recommendations MUST come from it.
-    Returning fewer than 3 in-pool picks is fine. Returning an empty list
-    with a 'why_not' explanation is fine. Returning ANY off-pool champion
-    is a complete failure of the response.
-  - Never recommend a champion already in the draft.
-  - Never recommend a champion in the lane blacklist (loses lane on real data).
-  - Never recommend a champion in the avoidance list (loses comp-level).
-  - Never recommend the FORBIDDEN damage type.
-  - The 3 recommendations should be different archetypes WHEN POOL ALLOWS —
-    skip this rule if pool only contains 1-2 champions for this role.
-  - All reasoning must reference enemy/ally champions BY NAME.
-  - If filling a gap and winning lane conflict, prioritize the GAP — explain trade-off.
+STRICT RULES (in priority order — RULE #1 overrides EVERYTHING):
+
+  RULE #1 — ROLE VIABILITY (ABSOLUTE, NO EXCEPTIONS):
+  Every recommendation MUST be a champion genuinely played in the specified
+  role in high-elo ranked play. This is checked against a live database.
+  NEVER recommend a champion outside their real roles, regardless of gap-filling
+  or damage balance. Examples of catastrophic failures:
+    - Nami for Jungle       (Nami is Support only)
+    - Anivia for Jungle     (Anivia is Mid only)
+    - Lux for Jungle        (Lux is Support/Mid)
+    - Darius for Support    (Darius is Top)
+    - Jinx for Mid          (Jinx is Bot)
+  The user message includes a ROLE VIABILITY LIST with every champion known
+  to be viable for the requested role. Your recommendations MUST come from that
+  list unless you have extremely strong evidence a champion is viable off-meta.
+  Recommending a wrong-role champion destroys user trust completely.
+
+  RULE #2 — Champion pool (if supplied, MUST come from it).
+  RULE #3 — Never recommend a champion already in the draft.
+  RULE #4 — Never recommend a champion in the lane blacklist.
+  RULE #5 — Never recommend a champion in the avoidance list.
+  RULE #6 — Never recommend the FORBIDDEN damage type.
+  RULE #7 — The 3 recommendations should be different archetypes when possible.
+  RULE #8 — All reasoning must reference enemy/ally champions BY NAME.
+  RULE #9 — If filling a gap and winning lane conflict, prioritize the GAP.
 
 OUTPUT QUALITY RULES (violations destroy user trust):
   - Each recommendation MUST have a UNIQUE reason, win_condition, and
-    early_game_plan. Never copy-paste text between recommendations — a player
-    reading all 3 should feel they got 3 distinct opinions.
+    early_game_plan. ZERO copy-paste between recommendations — read all 3
+    before outputting. If any two share a sentence, rewrite it.
+  - Reasoning MUST be role-specific. For Jungle: mention clear speed, gank
+    paths, smite objective control. For Support: peel, vision control, roam
+    timing. For Mid: wave management, roam priority, mid priority. Generic
+    sentences like "can roam effectively and catch out enemy champions" that
+    apply to any champion in any role are failures. Name specific ganking
+    paths, dragon/baron control windows, or lane interactions.
   - damage_type must reflect the champion's PRIMARY damage source in standard
     builds (Hecarim = AD, Sejuani = Mixed, Orianna = AP). Do not label an AD
     champion as AP or vice versa.
-  - avoid_champions must ONLY list champions viable for the role being filled.
-    Never list a mid-only champion in a jungle player's avoid list, etc.
   - avoid_champions reasons must be factually accurate about damage types —
     never describe an AD champion (Ezreal, Ashe, Hecarim) as "AP".
 
@@ -165,6 +181,54 @@ def _format_team(picks: list[str]) -> str:
     if not picks:
         return "  (none yet)"
     return "\n".join(f"  - {p}" for p in picks)
+
+
+def _build_role_pool(role: str) -> list[str]:
+    """Return all champions in T that list this role as viable."""
+    from .composition_analyzer import T as _T
+    return sorted(c for c, t in _T.items() if role in t.get("roles", []))
+
+
+def _enforce_role_viability(result: dict, role: str) -> None:
+    """
+    Drop any recommendation whose champion is in T but NOT listed as viable
+    for the requested role.
+
+    Champions absent from T entirely are left through — they may be legitimate
+    off-meta picks not yet catalogued. Champions IN T with a mismatched role
+    are hard-dropped (Nami for Jungle, Anivia for Jungle, Darius for Support).
+    """
+    from .composition_analyzer import T as _T
+    recs = result.get("recommendations") or []
+    if not recs:
+        return
+
+    filtered: list[dict] = []
+    removed:  list[str]  = []
+
+    for rec in recs:
+        name = rec.get("champion", "").strip()
+        if not name:
+            continue
+        name_lower = name.lower()
+
+        # Find champion in T (case-insensitive)
+        matched_traits = None
+        for champ, traits in _T.items():
+            if champ.lower() == name_lower:
+                matched_traits = traits
+                break
+
+        if matched_traits is None:
+            filtered.append(rec)          # not in T → pass through
+        elif role in matched_traits.get("roles", []):
+            filtered.append(rec)          # viable for this role → keep
+        else:
+            removed.append(name)          # in T but wrong role → drop
+
+    result["recommendations"] = filtered
+    if removed:
+        result["role_filter_removed"] = removed
 
 
 def _enrich_team_analysis(result: dict, analysis: dict, dmg: dict, enemy_dmg: dict) -> None:
@@ -548,10 +612,27 @@ Return ONLY valid JSON."""
                 "   Cross-reference with the gaps + avoidance intel above before picking."
             )
 
+        role_pool        = _build_role_pool(role)
+        role_pool_str    = ", ".join(role_pool) if role_pool else "(no T data for this role)"
+        role_pool_block  = (
+            f"\n{'=' * 55}\n"
+            f"⛔ ROLE LOCK — {role.upper()} ONLY\n"
+            f"{'=' * 55}\n"
+            f"You are filling the {role} role. EVERY recommendation must be a\n"
+            f"champion actually played {role} at high elo. The following are the\n"
+            f"known {role}-viable champions in our database:\n\n"
+            f"  {role_pool_str}\n\n"
+            f"Recommending a champion NOT in this list (e.g. a Support for Jungle,\n"
+            f"a Mid laner for Bot) is a complete failure of the response. The server\n"
+            f"will discard any recommendation whose champion plays a different role.\n"
+            f"{'=' * 55}"
+        )
+
         user_message = f"""{dmg['hard_rule']}
 {intel_block}
 {lolalytics_block}{counter_pool_section}
 {avoidance_block}
+{role_pool_block}
 
 {'=' * 55}
 Role to fill: {role}
@@ -632,6 +713,9 @@ Return ONLY valid JSON, no extra text."""
         ) from exc
 
     # ── Python-level safety filters (hard guarantees) ─────────────────────────
+    # Role viability is the first and strictest filter — drop any rec whose
+    # champion is in T under a different role (e.g. Nami suggested for Jungle).
+    _enforce_role_viability(result, role)
     _enforce_filters(result, blacklist_names, avoid_set, drafted_names, dmg["forbidden_type"])
     # Pool enforcement runs LAST so it has the final word — recommendations
     # that survived every other filter are still dropped if they're not in
