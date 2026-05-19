@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import {
   Swords, Shield, Wand2, Crosshair, Users, Brain, RefreshCw,
-  Lock, Ban, ChevronDown, ChevronUp, X, Bookmark, Sparkles, Play,
+  Lock, Ban, ChevronDown, ChevronUp, X, Bookmark, Sparkles, Play, LogIn,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import ChampionSearch from "./ChampionSearch";
 import TeamSlot from "./TeamSlot";
@@ -78,8 +79,9 @@ export default function DraftBoard() {
     }
   }, [allyPicks]); // eslint-disable-line
 
-  const isLocked  = !isPro && !isAdmin && getDailyUsage().count >= FREE_LIMIT;
-  const usageLeft = FREE_LIMIT - usage.count;
+  const isQuotaLocked = !isPro && !isAdmin && getDailyUsage().count >= FREE_LIMIT;
+  const isLocked      = !user || isQuotaLocked;   // not logged in OR quota hit
+  const usageLeft     = FREE_LIMIT - usage.count;
 
   useEffect(() => {
     fetchAllChampions()
@@ -167,7 +169,12 @@ export default function DraftBoard() {
   };
 
   const handleSuggest = async () => {
-    if (isLocked) return toast.error("Daily limit reached. Upgrade to Pro for unlimited suggestions!");
+    if (!user) {
+      // Shouldn't normally be reachable since the button is hidden, but safety net
+      toast.error("Please sign in to use the Engine.");
+      return;
+    }
+    if (isQuotaLocked) return toast.error("Daily limit reached. Upgrade to Pro for unlimited suggestions!");
     setLoading(true);
     setResult(null);
     try {
@@ -287,7 +294,8 @@ export default function DraftBoard() {
             </p>
             <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">Draft Board</h1>
           </div>
-          {!isPro && !isAdmin && (
+          {/* Usage counter — only shown to logged-in free users */}
+          {user && !isPro && !isAdmin && (
             <div className={`px-3 py-1.5 rounded-lg border text-xs font-medium font-mono uppercase tracking-wider
               ${usageLeft <= 1
                 ? "border-magenta/50 bg-magenta/10 text-magenta"
@@ -389,27 +397,36 @@ export default function DraftBoard() {
             </button>
 
             {/* Run Engine — primary CTA */}
-            <button
-              onClick={handleSuggest}
-              disabled={loading || isLocked}
-              className={`px-5 py-2 rounded-lg font-bold text-sm uppercase tracking-wider transition-all flex items-center gap-2 whitespace-nowrap
-                ${isLocked
-                  ? "bg-navy-700 border border-navy-600 text-navy-500 cursor-not-allowed"
-                  : loading
-                  ? "bg-navy-700 border border-cyan/30 text-cyan cursor-wait"
-                  : "btn-esports shadow-glow-cyan"}`}
-            >
-              {isLocked ? (
-                <><Lock size={14} /> Upgrade</>
-              ) : loading ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-cyan border-t-transparent rounded-full animate-spin" />
-                  Analyzing
-                </>
-              ) : (
-                <><Play size={14} fill="currentColor" /> Run Engine</>
-              )}
-            </button>
+            {user ? (
+              <button
+                onClick={handleSuggest}
+                disabled={loading || isQuotaLocked}
+                className={`px-5 py-2 rounded-lg font-bold text-sm uppercase tracking-wider transition-all flex items-center gap-2 whitespace-nowrap
+                  ${isQuotaLocked
+                    ? "bg-navy-700 border border-navy-600 text-navy-500 cursor-not-allowed"
+                    : loading
+                    ? "bg-navy-700 border border-cyan/30 text-cyan cursor-wait"
+                    : "btn-esports shadow-glow-cyan"}`}
+              >
+                {isQuotaLocked ? (
+                  <><Lock size={14} /> Upgrade</>
+                ) : loading ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-cyan border-t-transparent rounded-full animate-spin" />
+                    Analyzing
+                  </>
+                ) : (
+                  <><Play size={14} fill="currentColor" /> Run Engine</>
+                )}
+              </button>
+            ) : (
+              <Link
+                to="/login?redirect=/draft"
+                className="px-5 py-2 rounded-lg font-bold text-sm uppercase tracking-wider transition-all flex items-center gap-2 whitespace-nowrap btn-gold shadow-gold"
+              >
+                <LogIn size={14} /> Sign In to Run Engine
+              </Link>
+            )}
 
             {/* Reset (icon-only) */}
             <button

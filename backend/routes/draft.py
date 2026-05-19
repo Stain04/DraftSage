@@ -86,9 +86,15 @@ async def suggest_champions(body: SuggestRequest, request: Request):
     if len(body.enemy_picks) > 5:
         raise HTTPException(status_code=400, detail="Enemy picks cannot exceed 5 champions.")
 
-    # ── Auth + abuse protection ────────────────────────────────────────────
+    # ── Auth — login required for all Engine requests ──────────────────────
     token = extract_bearer_token(request)
     user  = verify_jwt(token) if token else None
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="login_required",
+        )
 
     if user:
         meta = user.user_metadata or {}

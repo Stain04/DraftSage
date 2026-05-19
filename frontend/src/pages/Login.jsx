@@ -88,6 +88,19 @@ export default function Login() {
             </div>
           )}
 
+          {/* Login-required banner (redirected from Draft Board) */}
+          {reason === "login_required" && (
+            <div className="mb-5 flex items-start gap-2.5 p-3 rounded-lg border border-gold/40 bg-gold/10 animate-fade-in">
+              <AlertTriangle size={16} className="text-gold flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-navy-100 leading-relaxed">
+                <p className="font-semibold text-gold mb-0.5">Sign in to use the Engine</p>
+                <p className="text-navy-300">
+                  A free account is required to run draft analysis. It's free forever — sign in or create one in seconds.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Tab switcher */}
           <div className="flex rounded-xl overflow-hidden border border-navy-600 mb-6">
             {["login", "register"].map((m) => (

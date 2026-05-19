@@ -35,16 +35,26 @@ api.interceptors.response.use(
   (error) => {
     const status = error?.response?.status;
     const detail = error?.response?.data?.detail;
-    if (status === 401 && detail === "session_invalidated") {
-      try {
-        localStorage.removeItem("draftsage_token");
-        localStorage.removeItem("draftsage_session_id");
-      } catch { /* ignore */ }
-      // Don't redirect if we're already on /login (prevents loops)
-      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-        window.location.replace("/login?reason=session_invalidated");
+
+    if (status === 401) {
+      const alreadyOnLogin = typeof window !== "undefined" && window.location.pathname.startsWith("/login");
+
+      if (detail === "session_invalidated") {
+        try {
+          localStorage.removeItem("draftsage_token");
+          localStorage.removeItem("draftsage_session_id");
+        } catch { /* ignore */ }
+        if (!alreadyOnLogin) {
+          window.location.replace("/login?reason=session_invalidated");
+        }
+      } else if (detail === "login_required") {
+        // Unauthenticated Engine request — send to login with redirect back
+        if (!alreadyOnLogin) {
+          window.location.replace("/login?reason=login_required&redirect=/draft");
+        }
       }
     }
+
     return Promise.reject(error);
   }
 );
@@ -130,11 +140,12 @@ export function describeApiError(err, fallback = "Something went wrong. Please t
   }
   const s = err?.response?.status;
   if (s === 401) {
-    // session_invalidated is already handled by the response interceptor
-    // (forced redirect to /login); show a quieter message for the brief
-    // moment before the navigation kicks in.
-    if (err?.response?.data?.detail === "session_invalidated") {
+    const detail = err?.response?.data?.detail;
+    if (detail === "session_invalidated") {
       return "Signed in on another device — please sign in again.";
+    }
+    if (detail === "login_required") {
+      return "Please sign in to use the Engine.";
     }
     return "Please sign in again.";
   }
