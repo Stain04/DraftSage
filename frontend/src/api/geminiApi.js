@@ -7,9 +7,9 @@ const BASE_URL = (process.env.REACT_APP_API_URL || "https://draftsage-production
 
 const api = axios.create({
   baseURL: BASE_URL,
-  // Engine calls can take 10-20s when external sources (lolalytics) are slow.
-  // 45s is the upper bound — enough headroom for cold-starts + LLM streaming.
-  timeout: 45000,
+  // Engine calls can take 10-20s normally, but under concurrent load the 70b
+  // model can take 60-75s. 90s gives enough headroom without hanging forever.
+  timeout: 90000,
 });
 
 // Log resolved API URL once at startup so users can verify in DevTools
