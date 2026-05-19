@@ -5,6 +5,7 @@ import {
   Crown, Lock, Infinity as InfinityIcon, Bell, Clock,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import api from "../api/geminiApi";
 import { toast } from "react-hot-toast";
 
 // ─── COMING SOON FLAG ─────────────────────────────────────────────────────────
@@ -66,7 +67,26 @@ export default function Pricing() {
   const { user, isPro }   = useAuth();
   const navigate          = useNavigate();
   const [billing, setBilling]   = useState("yearly");   // default yearly for anchoring
+  const [loading, setLoading]   = useState(false);
   const [notifyLoading, setNotifyLoading] = useState(false);
+
+  const handleUpgrade = async (period = billing) => {
+    if (!user) { navigate("/login?redirect=/pricing"); return; }
+    setLoading(true);
+    try {
+      const { data } = await api.post("/api/payments/create-checkout-session", {
+        user_id: user.id,
+        email:   user.email,
+        billing_period: period,
+      });
+      window.location.href = data.url;
+    } catch (err) {
+      const detail = err?.response?.data?.detail || "Could not start checkout. Please try again.";
+      toast.error(detail);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleNotify = () => {
     setNotifyLoading(true);
