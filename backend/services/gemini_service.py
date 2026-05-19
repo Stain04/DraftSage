@@ -37,10 +37,7 @@ for i in range(1, 11):
 # DeepSeek R1 distill (Qwen-32b) — active on Groq as of May 2026.
 # llama-70b distill was decommissioned. Fallback list used if this is ever removed.
 GROQ_MODEL   = "deepseek-r1-distill-qwen-32b"
-GROQ_FALLBACKS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-]
+GROQ_FALLBACKS = []  # disabled — DeepSeek only
 
 # ── System prompt ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are DraftSage — a Challenger-level League of Legends draft analyst.
