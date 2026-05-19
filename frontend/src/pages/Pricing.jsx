@@ -2,11 +2,14 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Check, X, Zap, Brain, Star, ArrowRight, Shield, Sparkles,
-  Crown, Lock, Infinity as InfinityIcon,
+  Crown, Lock, Infinity as InfinityIcon, Bell, Clock,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import api from "../api/geminiApi";
 import { toast } from "react-hot-toast";
+
+// ─── COMING SOON FLAG ─────────────────────────────────────────────────────────
+// Set to false once Lemon Squeezy is approved and payments are live.
+const PRO_COMING_SOON = true;
 
 // ── Feature data ──────────────────────────────────────────────────────────────
 
@@ -62,25 +65,18 @@ function CompCell({ value }) {
 export default function Pricing() {
   const { user, isPro }   = useAuth();
   const navigate          = useNavigate();
-  const [loading, setLoading]   = useState(false);
   const [billing, setBilling]   = useState("yearly");   // default yearly for anchoring
+  const [notifyLoading, setNotifyLoading] = useState(false);
 
-  const handleUpgrade = async (period = billing) => {
-    if (!user) { navigate("/login?redirect=/pricing"); return; }
-    setLoading(true);
-    try {
-      const { data } = await api.post("/api/payments/create-checkout-session", {
-        user_id: user.id,
-        email:   user.email,
-        billing_period: period,
+  const handleNotify = () => {
+    setNotifyLoading(true);
+    setTimeout(() => {
+      setNotifyLoading(false);
+      toast.success("You're on the list! We'll notify you when Pro launches.", {
+        icon: "🚀",
+        duration: 4000,
       });
-      window.location.href = data.url;
-    } catch (err) {
-      const detail = err?.response?.data?.detail || "Could not start checkout. Please try again.";
-      toast.error(detail);
-    } finally {
-      setLoading(false);
-    }
+    }, 800);
   };
 
   const isYearly        = billing === "yearly";
@@ -99,6 +95,16 @@ export default function Pricing() {
 
       <div className="max-w-6xl mx-auto relative z-10">
 
+        {/* ── Coming Soon page banner ───────────────────────────────────── */}
+        {PRO_COMING_SOON && (
+          <div className="flex items-center justify-center gap-3 mb-8 px-5 py-3.5 rounded-2xl border border-gold/40 bg-gold/[0.07] backdrop-blur animate-fade-in">
+            <Clock size={16} className="text-gold flex-shrink-0" />
+            <p className="text-sm text-gold font-semibold">
+              Pro subscriptions are <span className="text-white">coming very soon</span> — payment processing is being finalized. The free plan is fully available now.
+            </p>
+          </div>
+        )}
+
         {/* ── Header ───────────────────────────────────────────────────── */}
         <div className="text-center mb-10 animate-fade-in">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-cyan/40 bg-navy-900/60 backdrop-blur mb-4 text-xs text-neon-cyan font-bold uppercase tracking-widest shadow-glow-cyan">
@@ -115,7 +121,9 @@ export default function Pricing() {
 
         {/* ── Billing toggle ──────────────────────────────────────────── */}
         <div className="flex justify-center mb-10 animate-fade-in" style={{ animationDelay: "0.1s" }}>
-          <div className="inline-flex items-center gap-1 p-1 rounded-full border border-navy-600 bg-navy-900/70 backdrop-blur">
+          <div className={`inline-flex items-center gap-1 p-1 rounded-full border border-navy-600 bg-navy-900/70 backdrop-blur ${
+            PRO_COMING_SOON ? "opacity-40 pointer-events-none select-none" : ""
+          }`}>
             <button
               onClick={() => setBilling("monthly")}
               className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${
@@ -182,15 +190,22 @@ export default function Pricing() {
                style={{ animationDelay: "0.1s" }}>
             <div className="absolute top-0 left-0 right-0 h-px bg-gold-gradient" />
 
-            {/* Most popular badge */}
-            <div className="absolute top-4 right-4 flex items-center gap-1 px-2.5 py-1 rounded-full bg-gold/20 border border-gold/40 text-xs text-gold font-bold uppercase tracking-wider">
-              <Crown size={11} fill="currentColor" /> Most Popular
-            </div>
+            {/* Badge — Coming Soon vs Most Popular */}
+            {PRO_COMING_SOON ? (
+              <div className="absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyan/20 border border-cyan/40 text-xs text-neon-cyan font-bold uppercase tracking-wider">
+                <span className="w-1.5 h-1.5 rounded-full bg-neon-cyan animate-ping" />
+                Coming Soon
+              </div>
+            ) : (
+              <div className="absolute top-4 right-4 flex items-center gap-1 px-2.5 py-1 rounded-full bg-gold/20 border border-gold/40 text-xs text-gold font-bold uppercase tracking-wider">
+                <Crown size={11} fill="currentColor" /> Most Popular
+              </div>
+            )}
 
             <div className="mb-5">
               <div className="flex items-center gap-2 mb-2">
                 <h2 className="font-bold text-2xl text-white">Pro</h2>
-                {isYearly && (
+                {!PRO_COMING_SOON && isYearly && (
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold uppercase tracking-wider">
                     {yearlySavings}
                   </span>
@@ -199,20 +214,31 @@ export default function Pricing() {
               <p className="text-navy-300 text-sm">For ranked players who want the edge</p>
             </div>
 
-            <div className="mb-6">
-              <div className="flex items-baseline gap-1">
-                <span className="text-5xl font-bold text-gradient-gold">${displayPrice}</span>
-                <span className="text-navy-400 ml-2 text-sm">{displaySub}</span>
+            {/* Price display */}
+            {PRO_COMING_SOON ? (
+              <div className="mb-6">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-5xl font-bold text-gradient-gold">${isYearly ? "6.58" : "9.99"}</span>
+                  <span className="text-navy-400 text-sm">{isYearly ? "/ mo, billed yearly" : "/ month"}</span>
+                </div>
+                <p className="text-xs text-navy-500 mt-1 italic">Pricing locked in — payments launching soon</p>
               </div>
-              {isYearly && (
-                <p className="text-xs text-navy-400 mt-1">
-                  <span className="text-emerald-400 font-semibold">$79 / year</span> · cancel anytime
-                </p>
-              )}
-              {!isYearly && (
-                <p className="text-xs text-navy-400 mt-1">Cancel anytime · no contract</p>
-              )}
-            </div>
+            ) : (
+              <div className="mb-6">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-5xl font-bold text-gradient-gold">${displayPrice}</span>
+                  <span className="text-navy-400 ml-2 text-sm">{displaySub}</span>
+                </div>
+                {isYearly && (
+                  <p className="text-xs text-navy-400 mt-1">
+                    <span className="text-emerald-400 font-semibold">$79 / year</span> · cancel anytime
+                  </p>
+                )}
+                {!isYearly && (
+                  <p className="text-xs text-navy-400 mt-1">Cancel anytime · no contract</p>
+                )}
+              </div>
+            )}
 
             <ul className="space-y-3 mb-8 flex-1">
               {PRO_FEATURES.map((f) => (
@@ -228,7 +254,28 @@ export default function Pricing() {
               ))}
             </ul>
 
-            {isPro ? (
+            {/* CTA — Coming Soon state vs live upgrade */}
+            {PRO_COMING_SOON ? (
+              <div className="space-y-3">
+                <button
+                  onClick={handleNotify}
+                  disabled={notifyLoading}
+                  className="btn-gold w-full py-3.5 rounded-xl text-base font-bold flex items-center justify-center gap-2 disabled:opacity-70"
+                >
+                  {notifyLoading ? (
+                    <div className="w-5 h-5 border-2 border-navy-900 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Bell size={17} />
+                      Notify Me at Launch
+                    </>
+                  )}
+                </button>
+                <p className="text-center text-xs text-navy-500">
+                  We'll email you the moment Pro goes live.
+                </p>
+              </div>
+            ) : isPro ? (
               <button
                 disabled
                 className="w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 bg-gold/20 border border-gold/40 text-gold cursor-default"
@@ -238,24 +285,12 @@ export default function Pricing() {
             ) : (
               <button
                 onClick={() => handleUpgrade(billing)}
-                disabled={loading}
-                className="btn-gold w-full py-3.5 rounded-xl text-base font-bold flex items-center justify-center gap-2 disabled:opacity-60"
+                className="btn-gold w-full py-3.5 rounded-xl text-base font-bold flex items-center justify-center gap-2"
               >
-                {loading ? (
-                  <div className="w-5 h-5 border-2 border-navy-900 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <Brain size={18} />
-                    {isYearly ? "Go Pro — Save 34%" : "Upgrade to Pro"}
-                    <ArrowRight size={16} />
-                  </>
-                )}
+                <Brain size={18} />
+                {isYearly ? "Go Pro — Save 34%" : "Upgrade to Pro"}
+                <ArrowRight size={16} />
               </button>
-            )}
-            {!user && (
-              <p className="text-center text-xs text-navy-400 mt-3">
-                <Link to="/login" className="text-gold hover:underline">Sign in</Link> to upgrade
-              </p>
             )}
 
             {/* Trust strip inside Pro card */}
@@ -393,17 +428,41 @@ export default function Pricing() {
         {/* ── Final CTA ───────────────────────────────────────────────── */}
         <div className="text-center mt-16">
           <h3 className="font-display text-2xl font-bold text-white mb-3">Ready to draft like a Challenger?</h3>
-          <p className="text-sm text-navy-400 mb-6">Unlimited Engine access · cancel anytime · 30-day refund.</p>
-          {!isPro && (
-            <button
-              onClick={() => handleUpgrade(billing)}
-              disabled={loading}
-              className="btn-esports inline-flex items-center gap-2 px-8 py-4 text-base font-bold"
-            >
-              <Brain size={18} />
-              {isYearly ? "Upgrade — Save 34%" : "Upgrade to Pro"}
-              <ArrowRight size={16} />
-            </button>
+          {PRO_COMING_SOON ? (
+            <>
+              <p className="text-sm text-navy-400 mb-6">
+                Pro is launching soon — join the notify list and be first in line.
+              </p>
+              <button
+                onClick={handleNotify}
+                disabled={notifyLoading}
+                className="btn-esports inline-flex items-center gap-2 px-8 py-4 text-base font-bold disabled:opacity-70"
+              >
+                {notifyLoading ? (
+                  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Bell size={18} />
+                    Get Notified at Launch
+                    <ArrowRight size={16} />
+                  </>
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-navy-400 mb-6">Unlimited Engine access · cancel anytime · 30-day refund.</p>
+              {!isPro && (
+                <button
+                  onClick={() => handleUpgrade(billing)}
+                  className="btn-esports inline-flex items-center gap-2 px-8 py-4 text-base font-bold"
+                >
+                  <Brain size={18} />
+                  {isYearly ? "Upgrade — Save 34%" : "Upgrade to Pro"}
+                  <ArrowRight size={16} />
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
