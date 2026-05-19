@@ -725,7 +725,7 @@ Return ONLY valid JSON, no extra text."""
                             {"role": "user",   "content": user_message},
                         ],
                         "temperature": 0.3,
-                        "max_tokens":  3000,
+                        "max_tokens":  4096,
                     },
                 )
             if nvidia_resp.status_code == 200:
@@ -792,41 +792,7 @@ Return ONLY valid JSON, no extra text."""
                     raise
 
 
-    # ── LLM call: NVIDIA NIM (fallback when all Groq keys exhausted) ──────────
-    if raw_text is None and NVIDIA_API_KEY:
-        print(f"[DraftSage] Groq exhausted — trying NVIDIA NIM ({NVIDIA_MODEL})", flush=True)
-        try:
-            async with httpx.AsyncClient(timeout=90.0) as nvidia_client:
-                nvidia_resp = await nvidia_client.post(
-                    f"{NVIDIA_API_BASE}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {NVIDIA_API_KEY}",
-                        "Content-Type":  "application/json",
-                    },
-                    json={
-                        "model":       NVIDIA_MODEL,
-                        "messages":    [
-                            {"role": "system", "content": SYSTEM_PROMPT},
-                            {"role": "user",   "content": user_message},
-                        ],
-                        "temperature": 0.3,
-                        "max_tokens":  3000,
-                    },
-                )
-            if nvidia_resp.status_code == 200:
-                nvidia_data = nvidia_resp.json()
-                nvidia_text = nvidia_data["choices"][0]["message"]["content"]
-                if nvidia_text and nvidia_text.strip():
-                    raw_text = nvidia_text.strip()
-                    print(f"[DraftSage] LLM: {NVIDIA_MODEL} (NVIDIA NIM fallback)", flush=True)
-                else:
-                    last_error = RuntimeError("NVIDIA NIM returned empty content.")
-            else:
-                last_error = RuntimeError(f"NVIDIA NIM error {nvidia_resp.status_code}: {nvidia_resp.text[:200]}")
-                print(f"[DraftSage] NVIDIA NIM failed: {last_error}", flush=True)
-        except Exception as e:
-            last_error = e
-            print(f"[DraftSage] NVIDIA NIM exception: {str(e)[:120]}", flush=True)
+    # (NVIDIA NIM duplicate block removed — handled above as primary)
 
     if raw_text is None:
         raise last_error or RuntimeError("All LLM providers exhausted (Groq + NVIDIA).")
