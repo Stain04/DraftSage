@@ -11,6 +11,9 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ResetPassword from "./pages/ResetPassword";
 import Admin from "./pages/Admin";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
+import Refund from "./pages/Refund";
 
 export default function App() {
   return (
@@ -26,6 +29,9 @@ export default function App() {
             <Route path="/dashboard"      element={<Dashboard />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/admin"          element={<Admin />} />
+            <Route path="/terms"          element={<Terms />} />
+            <Route path="/privacy"        element={<Privacy />} />
+            <Route path="/refund"         element={<Refund />} />
           </Routes>
           <EmailWatermark />
         </div>
