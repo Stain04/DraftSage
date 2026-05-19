@@ -39,6 +39,13 @@ for i in range(1, 11):
 GROQ_MODEL     = "qwen/qwen3-32b"
 GROQ_FALLBACKS = []  # disabled — Qwen3 only
 
+# ── Fallback LLM: NVIDIA NIM ─────────────────────────────────────────────────
+# OpenAI-compatible endpoint. Used when ALL Groq keys are rate-limited or down.
+# Set NVIDIA_API_KEY in Railway environment variables.
+NVIDIA_API_KEY    = os.getenv("NVIDIA_API_KEY", "").strip()
+NVIDIA_API_BASE   = "https://integrate.api.nvidia.com/v1"
+NVIDIA_MODEL      = "meta/llama-3.3-70b-instruct"
+
 # ── System prompt ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are DraftSage — a Challenger-level League of Legends draft analyst.
 
@@ -697,19 +704,11 @@ ENEMY TEAM:
 Now execute the 6-step reasoning order from the system prompt.
 Return ONLY valid JSON, no extra text."""
 
-    # ── LLM call: Groq ────────────────────────────────────────────────────────
+    # ── LLM call: Groq (primary) ──────────────────────────────────────────────
     raw_text   = None
     last_error = None
 
-    if raw_text is None:
-        if not GROQ_API_KEYS:
-            raise RuntimeError(
-                "No GROQ_API_KEY found. "
-                "Set at least GROQ_API_KEY in environment variables."
-            )
-
-        # Shuffle keys so concurrent requests each land on a different
-        # API key ("cashier") instead of all racing for Key 1.
+    if GROQ_API_KEYS:
         import random
         shuffled_keys = GROQ_API_KEYS.copy()
         random.shuffle(shuffled_keys)
@@ -739,28 +738,63 @@ Return ONLY valid JSON, no extra text."""
                     if not raw_text or not raw_text.strip():
                         last_error = RuntimeError("Groq returned empty content.")
                         raw_text   = None
-                        continue   # try next key
+                        continue
                     raw_text = raw_text.strip()
                     print(f"[DraftSage] LLM: {model} (Groq key #{idx+1})", flush=True)
                     break
                 except Exception as e:
                     last_error = e
                     err = str(e)
-                    print(f"[DraftSage] Key #{idx+1} failed: {err[:120]}", flush=True)
+                    print(f"[DraftSage] Groq key #{idx+1} failed: {err[:120]}", flush=True)
                     if any(x in err for x in ("rate_limit_exceeded", "429")):
-                        continue   # key rate-limited — try next key
+                        continue
                     if any(x in err for x in ("model_decommissioned", "model_not_found")):
-                        print(f"[DraftSage] Model {model} decommissioned — trying next fallback", flush=True)
-                        break      # skip remaining keys for this model, try next model
-                    # Transient errors (5xx, timeout, connection reset) —
-                    # try the next key instead of failing immediately.
+                        print(f"[DraftSage] Model {model} decommissioned — trying next", flush=True)
+                        break
                     if any(x in err for x in ("502", "503", "500", "timeout", "connection", "ReadTimeout", "ConnectError")):
                         continue
-                    # Truly fatal errors (400 bad request, auth) — surface immediately.
                     raise
+    else:
+        print("[DraftSage] No Groq keys configured — skipping to NVIDIA fallback", flush=True)
+
+    # ── LLM call: NVIDIA NIM (fallback when all Groq keys exhausted) ──────────
+    if raw_text is None and NVIDIA_API_KEY:
+        print(f"[DraftSage] Groq exhausted — trying NVIDIA NIM ({NVIDIA_MODEL})", flush=True)
+        try:
+            async with httpx.AsyncClient(timeout=90.0) as nvidia_client:
+                nvidia_resp = await nvidia_client.post(
+                    f"{NVIDIA_API_BASE}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                        "Content-Type":  "application/json",
+                    },
+                    json={
+                        "model":       NVIDIA_MODEL,
+                        "messages":    [
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user",   "content": user_message},
+                        ],
+                        "temperature": 0.3,
+                        "max_tokens":  3000,
+                    },
+                )
+            if nvidia_resp.status_code == 200:
+                nvidia_data = nvidia_resp.json()
+                nvidia_text = nvidia_data["choices"][0]["message"]["content"]
+                if nvidia_text and nvidia_text.strip():
+                    raw_text = nvidia_text.strip()
+                    print(f"[DraftSage] LLM: {NVIDIA_MODEL} (NVIDIA NIM fallback)", flush=True)
+                else:
+                    last_error = RuntimeError("NVIDIA NIM returned empty content.")
+            else:
+                last_error = RuntimeError(f"NVIDIA NIM error {nvidia_resp.status_code}: {nvidia_resp.text[:200]}")
+                print(f"[DraftSage] NVIDIA NIM failed: {last_error}", flush=True)
+        except Exception as e:
+            last_error = e
+            print(f"[DraftSage] NVIDIA NIM exception: {str(e)[:120]}", flush=True)
 
     if raw_text is None:
-        raise last_error or RuntimeError("All LLM providers exhausted.")
+        raise last_error or RuntimeError("All LLM providers exhausted (Groq + NVIDIA).")
 
     # ── Strip DeepSeek R1 <think> block (appears before the JSON) ────────────
     raw_text = re.sub(r"<think>[\s\S]*?</think>", "", raw_text, flags=re.IGNORECASE).strip()
