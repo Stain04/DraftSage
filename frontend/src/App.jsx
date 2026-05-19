@@ -35,6 +35,27 @@ export default function App() {
             <Route path="/refund"         element={<Refund />} />
           </Routes>
           <EmailWatermark />
+
+          {/* ── Sitewide footer — legal links (required for Paddle domain approval) ── */}
+          <footer style={{
+            borderTop: "1px solid rgba(255,255,255,0.06)",
+            padding: "20px 24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "12px",
+            background: "#080e22",
+          }}>
+            <span style={{ color: "#4a5578", fontSize: "12px" }}>
+              © 2026 DraftSage. Not affiliated with Riot Games.
+            </span>
+            <div style={{ display: "flex", gap: "20px" }}>
+              <a href="/terms"   style={{ color: "#6677aa", fontSize: "12px", textDecoration: "none" }}>Terms of Service</a>
+              <a href="/privacy" style={{ color: "#6677aa", fontSize: "12px", textDecoration: "none" }}>Privacy Policy</a>
+              <a href="/refund"  style={{ color: "#6677aa", fontSize: "12px", textDecoration: "none" }}>Refund Policy</a>
+            </div>
+          </footer>
         </div>
         <Toaster
           position="top-right"
