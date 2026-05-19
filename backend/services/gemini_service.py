@@ -34,10 +34,14 @@ for i in range(1, 11):
     if key:
         GROQ_API_KEYS.append(key)
 
-# DeepSeek R1 distill (Qwen-32b) — active on Groq as of May 2026.
-# llama-70b distill was decommissioned. Fallback list used if this is ever removed.
-GROQ_MODEL   = "deepseek-r1-distill-qwen-32b"
-GROQ_FALLBACKS = []  # disabled — DeepSeek only
+# Qwen3-32B — active reasoning model on Groq (replaces decommissioned DeepSeek).
+# Also outputs <think> blocks which are already stripped below.
+# Falls back to llama-3.3-70b-versatile (production stable) if Qwen is unavailable.
+GROQ_MODEL     = "qwen/qwen3-32b"
+GROQ_FALLBACKS = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+]
 
 # ── System prompt ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are DraftSage — a Challenger-level League of Legends draft analyst.
