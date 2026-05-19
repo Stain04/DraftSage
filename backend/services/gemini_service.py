@@ -34,9 +34,13 @@ for i in range(1, 11):
     if key:
         GROQ_API_KEYS.append(key)
 
-# DeepSeek R1 distill — strong reasoning model for structured JSON output.
-# We lock to this single model and spread concurrency across API keys instead.
-GROQ_MODEL = "deepseek-r1-distill-llama-70b"
+# DeepSeek R1 distill (Qwen-32b) — active on Groq as of May 2026.
+# llama-70b distill was decommissioned. Fallback list used if this is ever removed.
+GROQ_MODEL   = "deepseek-r1-distill-qwen-32b"
+GROQ_FALLBACKS = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+]
 
 # ── System prompt ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are DraftSage — a Challenger-level League of Legends draft analyst.
@@ -713,32 +717,40 @@ Return ONLY valid JSON, no extra text."""
         shuffled_keys = GROQ_API_KEYS.copy()
         random.shuffle(shuffled_keys)
 
-        for api_key in shuffled_keys:
-            try:
-                client   = AsyncGroq(api_key=api_key)
-                response = await client.chat.completions.create(
-                    model    = GROQ_MODEL,
-                    messages = [
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user",   "content": user_message},
-                    ],
-                    temperature = 0.3,
-                    max_tokens  = 3000,
-                )
-                raw_text = response.choices[0].message.content
-                if not raw_text or not raw_text.strip():
-                    last_error = RuntimeError("Groq returned empty content.")
-                    raw_text   = None
-                    continue   # try next key
-                raw_text = raw_text.strip()
-                print(f"[DraftSage] LLM: {GROQ_MODEL} (Groq key #{shuffled_keys.index(api_key)+1})", flush=True)
+        models_to_try = [GROQ_MODEL] + GROQ_FALLBACKS
+
+        for model in models_to_try:
+            if raw_text is not None:
                 break
-            except Exception as e:
-                last_error = e
-                err = str(e)
-                if any(x in err for x in ("rate_limit_exceeded", "429", "model_decommissioned", "model_not_found")):
-                    continue   # this key is rate-limited, try another
-                raise          # unexpected error — surface immediately
+            for api_key in shuffled_keys:
+                try:
+                    client   = AsyncGroq(api_key=api_key)
+                    response = await client.chat.completions.create(
+                        model    = model,
+                        messages = [
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user",   "content": user_message},
+                        ],
+                        temperature = 0.3,
+                        max_tokens  = 3000,
+                    )
+                    raw_text = response.choices[0].message.content
+                    if not raw_text or not raw_text.strip():
+                        last_error = RuntimeError("Groq returned empty content.")
+                        raw_text   = None
+                        continue   # try next key
+                    raw_text = raw_text.strip()
+                    print(f"[DraftSage] LLM: {model} (Groq key #{shuffled_keys.index(api_key)+1})", flush=True)
+                    break
+                except Exception as e:
+                    last_error = e
+                    err = str(e)
+                    if any(x in err for x in ("rate_limit_exceeded", "429")):
+                        continue   # key rate-limited — try next key
+                    if any(x in err for x in ("model_decommissioned", "model_not_found")):
+                        print(f"[DraftSage] Model {model} decommissioned — trying next fallback", flush=True)
+                        break      # skip remaining keys for this model, try next model
+                    raise          # unexpected error — surface immediately
 
     if raw_text is None:
         raise last_error or RuntimeError("All LLM providers exhausted.")
