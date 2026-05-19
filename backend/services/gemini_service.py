@@ -36,12 +36,8 @@ for i in range(1, 11):
 
 # Qwen3-32B — active reasoning model on Groq (replaces decommissioned DeepSeek).
 # Also outputs <think> blocks which are already stripped below.
-# Falls back to llama-3.3-70b-versatile (production stable) if Qwen is unavailable.
 GROQ_MODEL     = "qwen/qwen3-32b"
-GROQ_FALLBACKS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-]
+GROQ_FALLBACKS = []  # disabled — Qwen3 only
 
 # ── System prompt ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are DraftSage — a Challenger-level League of Legends draft analyst.
