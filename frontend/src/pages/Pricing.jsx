@@ -9,7 +9,7 @@ import api from "../api/geminiApi";
 import { toast } from "react-hot-toast";
 
 // ─── COMING SOON FLAG ─────────────────────────────────────────────────────────
-// Set to false once Lemon Squeezy is approved and payments are live.
+// Set to false once Paddle verification is approved and API keys are in Railway.
 const PRO_COMING_SOON = true;
 
 // ── Feature data ──────────────────────────────────────────────────────────────

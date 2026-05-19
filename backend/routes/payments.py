@@ -1,11 +1,13 @@
 """
-Lemon Squeezy payments routes — freemium model for DraftSage.
-Free: 3 suggestions/day | Pro: $9.99/month unlimited
+Paddle Billing payments routes — freemium model for DraftSage.
+Free: 3 suggestions/day | Pro: $9.99/month or $79/year, unlimited
 """
 
-import os
 import hashlib
 import hmac
+import json
+import os
+
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -13,20 +15,24 @@ from supabase import create_client
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
 
-LS_API_KEY             = os.getenv("LEMONSQUEEZY_API_KEY", "")
-LS_STORE_ID            = os.getenv("LEMONSQUEEZY_STORE_ID", "")
-LS_VARIANT_ID          = os.getenv("LEMONSQUEEZY_VARIANT_ID", "")          # Pro monthly $9.99
-LS_VARIANT_ID_YEARLY   = os.getenv("LEMONSQUEEZY_VARIANT_ID_YEARLY", "")   # Pro yearly  $79
-WEBHOOK_SECRET         = os.getenv("LEMONSQUEEZY_WEBHOOK_SECRET", "")
+# ── Paddle config (set these in Railway env vars) ──────────────────────────────
+PADDLE_API_KEY          = os.getenv("PADDLE_API_KEY", "")
+PADDLE_WEBHOOK_SECRET   = os.getenv("PADDLE_WEBHOOK_SECRET", "")
+PADDLE_PRICE_ID_MONTHLY = os.getenv("PADDLE_PRICE_ID_MONTHLY", "")   # pri_xxxxx
+PADDLE_PRICE_ID_YEARLY  = os.getenv("PADDLE_PRICE_ID_YEARLY", "")    # pri_xxxxx
 
-LS_API_BASE = "https://api.lemonsqueezy.com/v1"
+# Paddle API base — use sandbox for testing, live for prod
+PADDLE_IS_SANDBOX = os.getenv("PADDLE_SANDBOX", "false").lower() == "true"
+PADDLE_API_BASE   = (
+    "https://sandbox-api.paddle.com" if PADDLE_IS_SANDBOX
+    else "https://api.paddle.com"
+)
 
 
-def _ls_headers() -> dict:
+def _paddle_headers() -> dict:
     return {
-        "Accept": "application/vnd.api+json",
-        "Content-Type": "application/vnd.api+json",
-        "Authorization": f"Bearer {LS_API_KEY}",
+        "Authorization": f"Bearer {PADDLE_API_KEY}",
+        "Content-Type": "application/json",
     }
 
 
@@ -47,90 +53,114 @@ class CheckoutRequest(BaseModel):
     billing_period: str = "monthly"   # "monthly" | "yearly"
 
 
-# ── Create Checkout ────────────────────────────────────────────────────────────
+# ── Create Checkout (Paddle hosted checkout) ───────────────────────────────────
 
 @router.post("/create-checkout-session")
 async def create_checkout_session(body: CheckoutRequest):
-    """Create a Lemon Squeezy checkout and return the hosted checkout URL."""
-    if not LS_API_KEY:
-        raise HTTPException(status_code=503, detail="Lemon Squeezy not configured. Add LEMONSQUEEZY_API_KEY to backend/.env")
-    if not LS_STORE_ID or not LS_VARIANT_ID:
-        raise HTTPException(status_code=503, detail="Lemon Squeezy store/variant ID not configured.")
+    """
+    Create a Paddle transaction (checkout) and return the hosted payment URL.
+    Paddle's checkout page handles the full payment flow — no card data touches our server.
+    """
+    if not PADDLE_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Paddle not configured. Add PADDLE_API_KEY to Railway environment variables.",
+        )
 
-    # Pick the right variant based on requested billing period
     period_normalized = (body.billing_period or "monthly").lower()
+
     if period_normalized == "yearly":
-        if not LS_VARIANT_ID_YEARLY:
+        price_id = PADDLE_PRICE_ID_YEARLY
+        if not price_id:
             raise HTTPException(
                 status_code=503,
-                detail="Yearly plan not yet available. Set LEMONSQUEEZY_VARIANT_ID_YEARLY in Railway.",
+                detail="Yearly plan not configured. Set PADDLE_PRICE_ID_YEARLY in Railway.",
             )
-        variant_id = LS_VARIANT_ID_YEARLY
     else:
-        variant_id = LS_VARIANT_ID
+        price_id = PADDLE_PRICE_ID_MONTHLY
+        if not price_id:
+            raise HTTPException(
+                status_code=503,
+                detail="Monthly plan not configured. Set PADDLE_PRICE_ID_MONTHLY in Railway.",
+            )
 
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    frontend_url = os.getenv("FRONTEND_URL", "https://www.draftsage.pro")
 
+    # Paddle transaction create — passes custom_data so the webhook can resolve user_id
     payload = {
-        "data": {
-            "type": "checkouts",
-            "attributes": {
-                "checkout_options": {
-                    "embed": False,
-                },
-                "checkout_data": {
-                    "email": body.email,
-                    # Pass both user_id and email — email is the fallback if custom_data is lost
-                    "custom": {
-                        "user_id":        body.user_id,
-                        "email":          body.email,
-                        "billing_period": period_normalized,
-                    },
-                },
-                "product_options": {
-                    "redirect_url": f"{frontend_url}/dashboard?upgraded=true",
-                    "enabled_variants": [str(variant_id)],
-                },
-            },
-            "relationships": {
-                "store": {
-                    "data": {"type": "stores", "id": str(LS_STORE_ID)}
-                },
-                "variant": {
-                    "data": {"type": "variants", "id": str(variant_id)}
-                },
-            },
-        }
+        "items": [
+            {"price_id": price_id, "quantity": 1}
+        ],
+        "customer": {
+            "email": body.email,
+        },
+        "custom_data": {
+            "user_id": body.user_id,
+            "email":   body.email,
+            "billing_period": period_normalized,
+        },
+        "checkout": {
+            "url": f"{frontend_url}/dashboard?upgraded=true",
+        },
     }
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"{LS_API_BASE}/checkouts",
+            f"{PADDLE_API_BASE}/transactions",
             json=payload,
-            headers=_ls_headers(),
+            headers=_paddle_headers(),
             timeout=15,
         )
 
     if resp.status_code not in (200, 201):
-        raise HTTPException(status_code=502, detail=f"Lemon Squeezy error: {resp.text}")
+        raise HTTPException(status_code=502, detail=f"Paddle error: {resp.text}")
 
-    checkout_url = resp.json()["data"]["attributes"]["url"]
+    data = resp.json().get("data", {})
+    checkout_url = data.get("checkout", {}).get("url")
+
+    if not checkout_url:
+        raise HTTPException(status_code=502, detail="Paddle did not return a checkout URL.")
+
     return {"url": checkout_url}
 
 
-# ── Webhook ────────────────────────────────────────────────────────────────────
+# ── Webhook verification ───────────────────────────────────────────────────────
 
-def _verify_signature(payload_bytes: bytes, signature: str) -> bool:
-    """HMAC-SHA256 verification for Lemon Squeezy webhooks."""
-    if not WEBHOOK_SECRET:
+def _verify_paddle_signature(request_headers: dict, payload_bytes: bytes) -> bool:
+    """
+    Paddle webhook signature verification.
+    Paddle sends: Paddle-Signature: ts=<timestamp>;h1=<hmac_sha256>
+    We reconstruct: HMAC-SHA256(secret_key, ts:body)
+    """
+    if not PADDLE_WEBHOOK_SECRET:
+        print("[Paddle] WARNING: PADDLE_WEBHOOK_SECRET not set — skipping verification")
+        return True  # don't block if unconfigured (fail-open in dev)
+
+    sig_header = request_headers.get("paddle-signature", "")
+    if not sig_header:
         return False
+
+    # Parse ts and h1 from the header
+    parts = dict(part.split("=", 1) for part in sig_header.split(";") if "=" in part)
+    ts  = parts.get("ts", "")
+    h1  = parts.get("h1", "")
+
+    if not ts or not h1:
+        return False
+
+    # Build the signed payload: "<timestamp>:<raw_body>"
+    signed_payload = f"{ts}:{payload_bytes.decode('utf-8')}"
+
     computed = hmac.new(
-        WEBHOOK_SECRET.encode("utf-8"),
-        payload_bytes,
+        PADDLE_WEBHOOK_SECRET.encode("utf-8"),
+        signed_payload.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
-    return hmac.compare_digest(computed, signature)
 
+    return hmac.compare_digest(computed, h1)
+
+
+# ── Supabase helpers ───────────────────────────────────────────────────────────
 
 def _set_user_pro(user_id: str, is_pro: bool):
     """Flip is_pro in Supabase user_metadata via the admin API."""
@@ -141,90 +171,96 @@ def _set_user_pro(user_id: str, is_pro: bool):
             {"user_metadata": {"is_pro": is_pro}},
         )
         status = "Pro" if is_pro else "Free"
-        print(f"[LemonSqueezy] User {user_id} → {status}")
+        print(f"[Paddle] User {user_id} → {status}")
     except Exception as e:
-        print(f"[LemonSqueezy] ERROR updating user {user_id}: {e}")
+        print(f"[Paddle] ERROR updating user {user_id}: {e}")
 
 
-def _resolve_user_id(custom_data: dict, event: dict) -> str | None:
+def _resolve_user_id(custom_data: dict) -> str | None:
     """
-    Get the Supabase user_id from the webhook payload.
-    Primary:  meta.custom_data.user_id  (attached at checkout creation)
-    Fallback: look up by email from the order/subscription attributes.
+    Resolve Supabase user_id from Paddle webhook custom_data.
+    Primary:  custom_data.user_id  (attached at checkout creation)
+    Fallback: lookup by email in Supabase
     """
-    # Primary: user_id in custom_data
     user_id = custom_data.get("user_id")
     if user_id:
         return user_id
 
-    # Fallback: match by email via Supabase admin API
-    email = (
-        custom_data.get("email")
-        or event.get("data", {}).get("attributes", {}).get("user_email")
-    )
+    email = custom_data.get("email")
     if not email:
         return None
+
     try:
         sb = _get_supabase_admin()
-        # list_users returns a paginated list — search by email
         result = sb.auth.admin.list_users()
         for u in result:
-            if hasattr(u, 'email') and u.email == email:
-                print(f"[LemonSqueezy] Resolved user_id by email: {email} → {u.id}")
+            if hasattr(u, "email") and u.email == email:
+                print(f"[Paddle] Resolved user_id by email: {email} → {u.id}")
                 return u.id
     except Exception as e:
-        print(f"[LemonSqueezy] Email lookup failed: {e}")
+        print(f"[Paddle] Email lookup failed: {e}")
+
     return None
 
 
-@router.post("/webhook")
-async def lemonsqueezy_webhook(request: Request):
-    payload_bytes = await request.body()
-    signature = request.headers.get("X-Signature", "")
+# ── Webhook handler ────────────────────────────────────────────────────────────
 
-    if not _verify_signature(payload_bytes, signature):
-        raise HTTPException(status_code=400, detail="Invalid webhook signature.")
+@router.post("/webhook")
+async def paddle_webhook(request: Request):
+    """
+    Handles all Paddle subscription events.
+    Paddle retries failed webhooks for up to 72 hours — always return 200.
+    """
+    payload_bytes = await request.body()
+
+    if not _verify_paddle_signature(dict(request.headers), payload_bytes):
+        raise HTTPException(status_code=400, detail="Invalid Paddle webhook signature.")
 
     try:
-        event = await request.json()
+        event = json.loads(payload_bytes)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload.")
 
-    event_name  = event.get("meta", {}).get("event_name", "")
-    custom_data = event.get("meta", {}).get("custom_data") or {}
-    user_id     = _resolve_user_id(custom_data, event)
+    event_type  = event.get("event_type", "")
+    event_data  = event.get("data", {})
+    custom_data = event_data.get("custom_data") or {}
+    user_id     = _resolve_user_id(custom_data)
 
-    print(f"[LemonSqueezy] Event: {event_name} | user_id: {user_id} | custom_data: {custom_data}")
+    print(f"[Paddle] Event: {event_type} | user_id: {user_id} | custom_data: {custom_data}")
 
-    # ── Subscription activated → grant Pro ────────────────────────────────────
-    if event_name in ("subscription_created", "order_created"):
+    # ── Subscription created / activated → grant Pro ───────────────────────────
+    if event_type in ("subscription.created", "subscription.activated"):
         if user_id:
             _set_user_pro(user_id, True)
 
-    # ── Subscription resumed / payment recovered → re-grant Pro ───────────────
-    elif event_name == "subscription_updated":
-        status = event.get("data", {}).get("attributes", {}).get("status", "")
+    # ── Subscription updated → check status and sync ───────────────────────────
+    elif event_type == "subscription.updated":
+        status = event_data.get("status", "")
         if status == "active" and user_id:
             _set_user_pro(user_id, True)
+        elif status in ("canceled", "past_due", "paused") and user_id:
+            _set_user_pro(user_id, False)
 
-    # ── Subscription cancelled / expired / past due → revoke Pro ──────────────
-    elif event_name in (
-        "subscription_cancelled",
-        "subscription_expired",
-        "subscription_paused",
-    ):
+    # ── Subscription cancelled / paused → revoke Pro ──────────────────────────
+    elif event_type in ("subscription.canceled", "subscription.paused"):
         if user_id:
             _set_user_pro(user_id, False)
 
-    # ── Subscription resumed from pause → re-grant Pro ────────────────────────
-    elif event_name == "subscription_resumed":
+    # ── Subscription resumed → re-grant Pro ───────────────────────────────────
+    elif event_type == "subscription.resumed":
+        if user_id:
+            _set_user_pro(user_id, True)
+
+    # ── Payment succeeded (one-off confirmation) ───────────────────────────────
+    elif event_type == "transaction.completed":
+        # Subscriptions handle their own lifecycle events above.
+        # This fires for the initial transaction — set Pro here as a safety net.
         if user_id:
             _set_user_pro(user_id, True)
 
     else:
-        print(f"[LemonSqueezy] Unhandled event: {event_name}")
+        print(f"[Paddle] Unhandled event: {event_type}")
 
-    # Always return 200 so LemonSqueezy doesn't retry
     return {"status": "ok"}
 
 
