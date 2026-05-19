@@ -17,11 +17,6 @@ import json
 import os
 import re
 
-try:
-    from anthropic import AsyncAnthropicBedrock
-    _ANTHROPIC_AVAILABLE = True
-except ImportError:
-    _ANTHROPIC_AVAILABLE = False
 
 from groq import AsyncGroq
 
@@ -31,13 +26,7 @@ from .composition_analyzer     import analyze_comp, build_intelligence_block
 from .avoidance_engine         import derive_avoidance, build_avoidance_block, build_avoid_set
 from .summoner_spells          import get_summoner_spells
 
-# ── Primary: Claude Haiku 4.5 via AWS Bedrock ────────────────────────────────
-AWS_ACCESS_KEY_ID     = os.environ.get("AWS_ACCESS_KEY_ID", "").strip()
-AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "").strip()
-AWS_REGION            = os.environ.get("AWS_REGION", "us-east-2").strip()
-BEDROCK_MODEL         = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-
-# ── Fallback: Groq (used only when Anthropic is unavailable) ─────────────────
+# ── Primary LLM: Groq ────────────────────────────────────────────────────────
 GROQ_API_KEYS: list[str] = []
 for i in range(1, 11):
     suffix = "" if i == 1 else f"_{i}"
@@ -712,37 +701,10 @@ ENEMY TEAM:
 Now execute the 6-step reasoning order from the system prompt.
 Return ONLY valid JSON, no extra text."""
 
-    # ── LLM call: Anthropic primary → Groq fallback ──────────────────────────
+    # ── LLM call: Groq ────────────────────────────────────────────────────────
     raw_text   = None
     last_error = None
 
-    # 1) Try Claude Haiku 4.5 via AWS Bedrock (optional — requires IAM credentials)
-    if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and _ANTHROPIC_AVAILABLE:
-        try:
-            client = AsyncAnthropicBedrock(
-                aws_access_key=AWS_ACCESS_KEY_ID,
-                aws_secret_key=AWS_SECRET_ACCESS_KEY,
-                aws_region=AWS_REGION,
-            )
-            response = await client.messages.create(
-                model      = BEDROCK_MODEL,
-                max_tokens = 3000,
-                temperature= 0.3,
-                system     = SYSTEM_PROMPT,
-                messages   = [{"role": "user", "content": user_message}],
-            )
-            raw_text = response.content[0].text.strip() if response.content else None
-            if not raw_text:
-                last_error = RuntimeError("Bedrock returned empty content.")
-                raw_text   = None
-            else:
-                print(f"[DraftSage] LLM: Claude Haiku 4.5 (Bedrock / {AWS_REGION})", flush=True)
-        except Exception as e:
-            print(f"[DraftSage] Bedrock failed: {e} — falling back to Groq", flush=True)
-            last_error = e
-            raw_text   = None   # fall through to Groq
-
-    # 2) Groq fallback (used when ANTHROPIC_API_KEY is unset or Anthropic fails)
     if raw_text is None:
         if not GROQ_API_KEYS:
             raise RuntimeError(
