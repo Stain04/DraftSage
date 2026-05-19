@@ -16,7 +16,7 @@ The LLM receives all of this as structured intelligence and is required to:
 import json
 import os
 import re
-
+import httpx
 
 from groq import AsyncGroq
 
@@ -719,10 +719,14 @@ Return ONLY valid JSON, no extra text."""
         for model in models_to_try:
             if raw_text is not None:
                 break
-            for api_key in shuffled_keys:
+            for idx, api_key in enumerate(shuffled_keys):
                 try:
-                    client   = AsyncGroq(api_key=api_key)
-                    response = await client.chat.completions.create(
+                    # 75-second timeout — qwen3-32b can be slow under load;
+                    # this ensures a stalled request fails fast and the next
+                    # key is tried rather than blocking the worker.
+                    http_client = httpx.AsyncClient(timeout=75.0)
+                    client      = AsyncGroq(api_key=api_key, http_client=http_client)
+                    response    = await client.chat.completions.create(
                         model    = model,
                         messages = [
                             {"role": "system", "content": SYSTEM_PROMPT},
@@ -737,17 +741,23 @@ Return ONLY valid JSON, no extra text."""
                         raw_text   = None
                         continue   # try next key
                     raw_text = raw_text.strip()
-                    print(f"[DraftSage] LLM: {model} (Groq key #{shuffled_keys.index(api_key)+1})", flush=True)
+                    print(f"[DraftSage] LLM: {model} (Groq key #{idx+1})", flush=True)
                     break
                 except Exception as e:
                     last_error = e
                     err = str(e)
+                    print(f"[DraftSage] Key #{idx+1} failed: {err[:120]}", flush=True)
                     if any(x in err for x in ("rate_limit_exceeded", "429")):
                         continue   # key rate-limited — try next key
                     if any(x in err for x in ("model_decommissioned", "model_not_found")):
                         print(f"[DraftSage] Model {model} decommissioned — trying next fallback", flush=True)
                         break      # skip remaining keys for this model, try next model
-                    raise          # unexpected error — surface immediately
+                    # Transient errors (5xx, timeout, connection reset) —
+                    # try the next key instead of failing immediately.
+                    if any(x in err for x in ("502", "503", "500", "timeout", "connection", "ReadTimeout", "ConnectError")):
+                        continue
+                    # Truly fatal errors (400 bad request, auth) — surface immediately.
+                    raise
 
     if raw_text is None:
         raise last_error or RuntimeError("All LLM providers exhausted.")
