@@ -1,3 +1,4 @@
+// v2.1 — routes: home, draft, pricing, login, dashboard, reset-password, admin, terms, privacy, refund
 import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
