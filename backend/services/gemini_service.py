@@ -34,13 +34,13 @@ for i in range(1, 11):
     if key:
         GROQ_API_KEYS.append(key)
 
-# DeepSeek R1 distill first — it's a reasoning model and handles complex
-# multi-constraint prompts far better than vanilla Llama 70B.
+# llama-3.1-8b-instant first — fastest model (2-5s), quality is more than
+# sufficient for structured JSON output. Larger models are fallbacks only.
 GROQ_MODELS = [
-    "deepseek-r1-distill-llama-70b",
-    "llama-3.3-70b-versatile",
-    "llama3-70b-8192",
     "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+    "deepseek-r1-distill-llama-70b",
+    "llama3-70b-8192",
 ]
 
 # ── System prompt ─────────────────────────────────────────────────────────────
