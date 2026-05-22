@@ -44,7 +44,7 @@ GROQ_FALLBACKS = []  # disabled — Qwen3 only
 # Set NVIDIA_API_KEY in Railway environment variables.
 NVIDIA_API_KEY    = os.getenv("NVIDIA_API_KEY", "").strip()
 NVIDIA_API_BASE   = "https://integrate.api.nvidia.com/v1"
-NVIDIA_MODEL      = "stepfun-ai/step-3.5-flash"  # fast sparse MoE reasoning model
+NVIDIA_MODEL      = "meta/llama-3.3-70b-instruct"  # Step-3.5 Flash fails (empty/exception); llama reliable
 
 # ── System prompt ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are DraftSage — a Challenger-level League of Legends draft analyst.
@@ -768,7 +768,7 @@ Return ONLY valid JSON, no extra text."""
                             {"role": "user",   "content": user_message},
                         ],
                         temperature = 0.3,
-                        max_tokens  = 2000,   # keep total (prompt+output) under Groq 6000 TPM free tier
+                        max_tokens  = 3000,   # 2000 caused JSON truncation → 502
                     )
                     raw_text = response.choices[0].message.content
                     if not raw_text or not raw_text.strip():
@@ -782,7 +782,7 @@ Return ONLY valid JSON, no extra text."""
                     last_error = e
                     err = str(e)
                     print(f"[DraftSage] Groq key #{idx+1} failed: {err[:120]}", flush=True)
-                    if any(x in err for x in ("rate_limit_exceeded", "429")):
+                    if any(x in err for x in ("rate_limit_exceeded", "429", "413", "Request too large", "tokens per minute")):
                         continue
                     if any(x in err for x in ("model_decommissioned", "model_not_found")):
                         print(f"[DraftSage] Model {model} decommissioned — trying next", flush=True)
