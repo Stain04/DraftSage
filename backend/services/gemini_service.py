@@ -694,7 +694,8 @@ ENEMY TEAM:
 {enemy_str}{pool_section}
 
 Now execute the 6-step reasoning order from the system prompt.
-Return ONLY valid JSON, no extra text."""
+Return ONLY valid JSON, no extra text.
+/no_think"""
 
     # ── LLM call: Groq ───────────────────────────────────────────────────────
     raw_text   = None
@@ -751,8 +752,22 @@ Return ONLY valid JSON, no extra text."""
 
     if raw_text is None:
         raise last_error or RuntimeError("All Groq keys exhausted. Try again in a moment.")
-    # ── Strip DeepSeek R1 <think> block (appears before the JSON) ────────────
+    # ── Strip <think> block (qwen3-32b / DeepSeek R1) ────────────────────────
+    # 1. Strip complete <think>...</think> blocks
     raw_text = re.sub(r"<think>[\s\S]*?</think>", "", raw_text, flags=re.IGNORECASE).strip()
+    # 2. If <think> opened but token limit hit before </think>, strip everything
+    #    from the opening tag onward and try to rescue JSON from what's left.
+    if "<think>" in raw_text.lower():
+        before_think = re.sub(r"<think>[\s\S]*", "", raw_text, flags=re.IGNORECASE).strip()
+        if before_think:
+            raw_text = before_think
+        else:
+            # Think block ate everything — surface a clear error so the next
+            # retry can use a different key / model.
+            raise RuntimeError(
+                "Model response was consumed entirely by a <think> block. "
+                "Try again — /no_think flag will prevent this on the next call."
+            )
 
     # ── Robust JSON extraction ────────────────────────────────────────────────
     if "```" in raw_text:
