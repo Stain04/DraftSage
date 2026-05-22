@@ -17,6 +17,7 @@ import json
 import os
 import re
 import random
+import threading
 
 from groq import AsyncGroq
 
@@ -37,6 +38,22 @@ for i in range(1, 11):
 # Qwen3-32B — active reasoning model on Groq.
 GROQ_MODEL     = "qwen/qwen3-32b"
 GROQ_FALLBACKS = []  # disabled — Qwen3 only
+
+# ── Global round-robin key counter ────────────────────────────────────────
+# Each request gets the NEXT key in sequence (wraps around).
+# Thread-safe via threading.Lock — works correctly with 1 uvicorn worker.
+_key_counter      = 0
+_key_counter_lock = threading.Lock()
+
+def _next_key_start() -> int:
+    """Return and advance the global key index (round-robin)."""
+    global _key_counter
+    if not GROQ_API_KEYS:
+        return 0
+    with _key_counter_lock:
+        idx = _key_counter % len(GROQ_API_KEYS)
+        _key_counter += 1
+    return idx
 
 # ── System prompt ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are DraftSage — a Challenger-level League of Legends draft analyst.
@@ -707,15 +724,17 @@ Return ONLY valid JSON, no extra text.
             "Add GROQ_API_KEY (and GROQ_API_KEY_2, _3 …) in Railway environment variables."
         )
 
-    # Shuffle keys so concurrent requests spread across keys instead of
-    # all hitting Key 1 simultaneously.
-    shuffled_keys = GROQ_API_KEYS.copy()
-    random.shuffle(shuffled_keys)
+    # Round-robin: start from the globally next key, then fall through
+    # the remaining keys if that one is rate-limited.
+    start      = _next_key_start()
+    n          = len(GROQ_API_KEYS)
+    key_order  = [GROQ_API_KEYS[(start + i) % n] for i in range(n)]
+    print(f"[DraftSage] Round-robin start: key #{start + 1} of {n}", flush=True)
 
     for model in ([GROQ_MODEL] + GROQ_FALLBACKS):
         if raw_text is not None:
             break
-        for idx, api_key in enumerate(shuffled_keys):
+        for idx, api_key in enumerate(key_order):
             try:
                 import httpx as _httpx
                 http_client = _httpx.AsyncClient(timeout=75.0)
