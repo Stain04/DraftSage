@@ -16,7 +16,7 @@ The LLM receives all of this as structured intelligence and is required to:
 import json
 import os
 import re
-import httpx
+import random
 
 from groq import AsyncGroq
 
@@ -34,17 +34,9 @@ for i in range(1, 11):
     if key:
         GROQ_API_KEYS.append(key)
 
-# Qwen3-32B — active reasoning model on Groq (replaces decommissioned DeepSeek).
-# Also outputs <think> blocks which are already stripped below.
+# Qwen3-32B — active reasoning model on Groq.
 GROQ_MODEL     = "qwen/qwen3-32b"
 GROQ_FALLBACKS = []  # disabled — Qwen3 only
-
-# ── Fallback LLM: NVIDIA NIM ─────────────────────────────────────────────────
-# OpenAI-compatible endpoint. Used when ALL Groq keys are rate-limited or down.
-# Set NVIDIA_API_KEY in Railway environment variables.
-NVIDIA_API_KEY    = os.getenv("NVIDIA_API_KEY", "").strip()
-NVIDIA_API_BASE   = "https://integrate.api.nvidia.com/v1"
-NVIDIA_MODEL      = "meta/llama-3.3-70b-instruct"  # Step-3.5 Flash fails (empty/exception); llama reliable
 
 # ── System prompt ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are DraftSage — a Challenger-level League of Legends draft analyst.
@@ -704,99 +696,61 @@ ENEMY TEAM:
 Now execute the 6-step reasoning order from the system prompt.
 Return ONLY valid JSON, no extra text."""
 
-    # ── LLM call: NVIDIA NIM (primary — testing) ──────────────────────────────
+    # ── LLM call: Groq ───────────────────────────────────────────────────────
     raw_text   = None
     last_error = None
 
-    if NVIDIA_API_KEY:
-        print(f"[DraftSage] Trying NVIDIA NIM ({NVIDIA_MODEL}) [primary]", flush=True)
-        try:
-            async with httpx.AsyncClient(timeout=90.0) as nvidia_client:
-                nvidia_resp = await nvidia_client.post(
-                    f"{NVIDIA_API_BASE}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {NVIDIA_API_KEY}",
-                        "Content-Type":  "application/json",
-                    },
-                    json={
-                        "model":       NVIDIA_MODEL,
-                        "messages":    [
-                            {"role": "system", "content": SYSTEM_PROMPT},
-                            {"role": "user",   "content": user_message},
-                        ],
-                        "temperature": 0.3,
-                        "max_tokens":  4096,
-                    },
+    if not GROQ_API_KEYS:
+        raise RuntimeError(
+            "No GROQ_API_KEY configured. "
+            "Add GROQ_API_KEY (and GROQ_API_KEY_2, _3 …) in Railway environment variables."
+        )
+
+    # Shuffle keys so concurrent requests spread across keys instead of
+    # all hitting Key 1 simultaneously.
+    shuffled_keys = GROQ_API_KEYS.copy()
+    random.shuffle(shuffled_keys)
+
+    for model in ([GROQ_MODEL] + GROQ_FALLBACKS):
+        if raw_text is not None:
+            break
+        for idx, api_key in enumerate(shuffled_keys):
+            try:
+                import httpx as _httpx
+                http_client = _httpx.AsyncClient(timeout=75.0)
+                client      = AsyncGroq(api_key=api_key, http_client=http_client)
+                response    = await client.chat.completions.create(
+                    model    = model,
+                    messages = [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user",   "content": user_message},
+                    ],
+                    temperature = 0.3,
+                    max_tokens  = 3000,
                 )
-            if nvidia_resp.status_code == 200:
-                nvidia_data = nvidia_resp.json()
-                nvidia_text = nvidia_data["choices"][0]["message"]["content"]
-                if nvidia_text and nvidia_text.strip():
-                    raw_text = nvidia_text.strip()
-                    print(f"[DraftSage] LLM: {NVIDIA_MODEL} (NVIDIA NIM)", flush=True)
-                else:
-                    last_error = RuntimeError("NVIDIA NIM returned empty content.")
-                    print(f"[DraftSage] NVIDIA NIM empty — falling back to Groq", flush=True)
-            else:
-                last_error = RuntimeError(f"NVIDIA NIM {nvidia_resp.status_code}: {nvidia_resp.text[:200]}")
-                print(f"[DraftSage] NVIDIA NIM failed ({nvidia_resp.status_code}) — falling back to Groq", flush=True)
-        except Exception as e:
-            last_error = e
-            print(f"[DraftSage] NVIDIA NIM exception: {str(e)[:120]} — falling back to Groq", flush=True)
-    else:
-        print("[DraftSage] No NVIDIA_API_KEY — using Groq", flush=True)
-
-    # ── LLM call: Groq (fallback when NVIDIA fails/missing) ───────────────────
-    if raw_text is None and GROQ_API_KEYS:
-        import random
-        shuffled_keys = GROQ_API_KEYS.copy()
-        random.shuffle(shuffled_keys)
-
-        models_to_try = [GROQ_MODEL] + GROQ_FALLBACKS
-
-        for model in models_to_try:
-            if raw_text is not None:
+                raw_text = response.choices[0].message.content
+                if not raw_text or not raw_text.strip():
+                    last_error = RuntimeError("Groq returned empty content.")
+                    raw_text   = None
+                    continue
+                raw_text = raw_text.strip()
+                print(f"[DraftSage] LLM: {model} (Groq key #{idx+1})", flush=True)
                 break
-            for idx, api_key in enumerate(shuffled_keys):
-                try:
-                    http_client = httpx.AsyncClient(timeout=75.0)
-                    client      = AsyncGroq(api_key=api_key, http_client=http_client)
-                    response    = await client.chat.completions.create(
-                        model    = model,
-                        messages = [
-                            {"role": "system", "content": SYSTEM_PROMPT},
-                            {"role": "user",   "content": user_message},
-                        ],
-                        temperature = 0.3,
-                        max_tokens  = 3000,   # 2000 caused JSON truncation → 502
-                    )
-                    raw_text = response.choices[0].message.content
-                    if not raw_text or not raw_text.strip():
-                        last_error = RuntimeError("Groq returned empty content.")
-                        raw_text   = None
-                        continue
-                    raw_text = raw_text.strip()
-                    print(f"[DraftSage] LLM: {model} (Groq key #{idx+1})", flush=True)
+            except Exception as e:
+                last_error = e
+                err = str(e)
+                print(f"[DraftSage] Groq key #{idx+1} failed: {err[:120]}", flush=True)
+                if any(x in err for x in ("rate_limit_exceeded", "429", "413", "Request too large", "tokens per minute")):
+                    continue  # rate-limited — try next key
+                if any(x in err for x in ("model_decommissioned", "model_not_found")):
+                    print(f"[DraftSage] Model {model} decommissioned — trying next", flush=True)
                     break
-                except Exception as e:
-                    last_error = e
-                    err = str(e)
-                    print(f"[DraftSage] Groq key #{idx+1} failed: {err[:120]}", flush=True)
-                    if any(x in err for x in ("rate_limit_exceeded", "429", "413", "Request too large", "tokens per minute")):
-                        continue
-                    if any(x in err for x in ("model_decommissioned", "model_not_found")):
-                        print(f"[DraftSage] Model {model} decommissioned — trying next", flush=True)
-                        break
-                    if any(x in err for x in ("502", "503", "500", "timeout", "connection", "ReadTimeout", "ConnectError")):
-                        continue
-                    raise
-
-
-    # (NVIDIA NIM duplicate block removed — handled above as primary)
+                if any(x in err for x in ("502", "503", "500", "timeout", "connection", "ReadTimeout", "ConnectError")):
+                    continue  # transient error — try next key
+                raise
 
     if raw_text is None:
-        raise last_error or RuntimeError("All LLM providers exhausted (Groq + NVIDIA).")
-
+        raise last_error or RuntimeError("All Groq keys exhausted. Try again in a moment.")
     # ── Strip DeepSeek R1 <think> block (appears before the JSON) ────────────
     raw_text = re.sub(r"<think>[\s\S]*?</think>", "", raw_text, flags=re.IGNORECASE).strip()
 
