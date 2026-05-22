@@ -44,7 +44,7 @@ GROQ_FALLBACKS = []  # disabled — Qwen3 only
 # Set NVIDIA_API_KEY in Railway environment variables.
 NVIDIA_API_KEY    = os.getenv("NVIDIA_API_KEY", "").strip()
 NVIDIA_API_BASE   = "https://integrate.api.nvidia.com/v1"
-NVIDIA_MODEL      = "meta/llama-3.3-70b-instruct"  # fast, reliable; DeepSeek R1 times out on free tier
+NVIDIA_MODEL      = "stepfun-ai/step-3.5-flash"  # fast sparse MoE reasoning model
 
 # ── System prompt ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are DraftSage — a Challenger-level League of Legends draft analyst.
@@ -725,7 +725,7 @@ Return ONLY valid JSON, no extra text."""
                             {"role": "user",   "content": user_message},
                         ],
                         "temperature": 0.3,
-                        "max_tokens":  3500,   # llama-3.3-70b — no think block overhead
+                        "max_tokens":  4096,
                     },
                 )
             if nvidia_resp.status_code == 200:
