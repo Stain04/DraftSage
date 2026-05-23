@@ -165,12 +165,12 @@ def derive_avoidance(
             })
 
     # Rule 6 — multiple melee dive/pick threats → avoid fragile immobile AP carries
-    enemy_ap_threats = sum(
+    melee_dive_threats = sum(
         1 for p in enemy_picks
         if get_traits(p).get("dive", 0) + get_traits(p).get("pick", 0) >= 2
         and get_traits(p).get("ranged", 0) == 0
     )
-    if enemy_ap_threats >= 2:
+    if melee_dive_threats >= 2:
         threat_names = [
             p.split("(")[0].strip() for p in enemy_picks
             if get_traits(p).get("dive", 0) + get_traits(p).get("pick", 0) >= 2
@@ -192,7 +192,7 @@ def derive_avoidance(
                 "category": "Fragile AP carries vs melee dive",
                 "champions": targets[:5],
                 "reason": (
-                    f"Enemy has {enemy_ap_threats} melee dive/pick threats "
+                    f"Enemy has {melee_dive_threats} melee dive/pick threats "
                     f"({', '.join(threat_names[:3])}). "
                     "Immobile AP carries with no escape will be one-shot before they can cast."
                 ),

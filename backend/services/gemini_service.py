@@ -561,8 +561,12 @@ async def get_draft_suggestions(
     # ── Stage 3: Live Lolalytics counter pool + tier list ─────────────────────
     lolalytics_block:  str       = ""
     verified_counters: list[str] = []
-    blacklist_names:   set[str]  = set()
     tier_list_ref:     list      = []
+
+    # Track how many enemies each champion loses to — only blacklist champs
+    # that lose to 2+ enemies (not just one lane's data).
+    from collections import defaultdict
+    matchup_losses: dict[str, int] = defaultdict(int)
 
     if enemy_picks:
         try:
@@ -577,15 +581,21 @@ async def get_draft_suggestions(
             lolalytics_block = build_lolalytics_context(enemy_data, tier_list_ref, role, enemy_laner)
 
             for data in enemy_data:
-                # Blacklist only champions that lose to the DIRECT LANE OPPONENT.
-                # Applying all enemy picks' easy_matchups causes false positives for
-                # flex champions (e.g. top-lane matchup data pollutes ADC suggestions).
+                # Collect easy_matchups from ALL enemies. A champion that
+                # loses to multiple enemies is a genuinely bad pick; a champion
+                # that only loses to one enemy's lane data is noise.
+                easy = data.get("easy_matchups", [])
+                seen_this_enemy: set[str] = set()
+                for c in easy:
+                    cname = c["champion"].lower()
+                    if cname not in seen_this_enemy:
+                        matchup_losses[cname] += 1
+                        seen_this_enemy.add(cname)
+
+                # Verified counters still come from the lane opponent only
                 is_lane_opponent = (
                     enemy_laner and data["champion"].lower() == enemy_laner.lower()
                 )
-                if is_lane_opponent or not enemy_laner:
-                    for c in data.get("easy_matchups", []):
-                        blacklist_names.add(c["champion"].lower())
                 if is_lane_opponent:
                     verified_counters = [c["champion"] for c in data.get("counters", [])]
         except Exception as e:
@@ -594,6 +604,11 @@ async def get_draft_suggestions(
             # blacklists, and tier lists with zero indication.
             print(f"[DraftSage] WARNING: Lolalytics/OP.GG fetch failed: {e}", flush=True)
             # Soft fail — engine still works without live data, just less informed
+
+    # Blacklist champions that lose to 2+ different enemies' matchup data.
+    # This filters out lane-specific noise while keeping picks that are
+    # genuinely bad against the enemy team as a whole.
+    blacklist_names: set[str] = {name for name, count in matchup_losses.items() if count >= 2}
 
     # ── Stage 4: Avoidance engine ─────────────────────────────────────────────
     avoid_rules     = derive_avoidance(ally_picks, enemy_picks, analysis, role)
