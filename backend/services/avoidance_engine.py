@@ -17,6 +17,11 @@ Output is consumed by the AI prompt and surfaced to the user.
 from .composition_analyzer import T, get_traits
 
 
+def _norm_champ(name: str) -> str:
+    """Normalize champion name for comparison — strips apostrophes, spaces, periods."""
+    return name.strip().lower().replace("'", "").replace(" ", "").replace(".", "")
+
+
 def _champs_matching(predicate, role: str | None = None) -> set[str]:
     """
     Return all champions in T where predicate(traits) is True.
@@ -37,8 +42,8 @@ def _champs_matching(predicate, role: str | None = None) -> set[str]:
 
 def _filter_existing(picks: list[str], champions: set[str]) -> list[str]:
     """Remove champions already in the draft from a suggestion set."""
-    drafted = {p.split("(")[0].strip().lower() for p in picks}
-    return sorted([c for c in champions if c.lower() not in drafted])
+    drafted = {_norm_champ(p.split("(")[0]) for p in picks}
+    return sorted([c for c in champions if _norm_champ(c) not in drafted])
 
 
 def derive_avoidance(
@@ -272,9 +277,9 @@ def build_avoidance_block(rules: list[dict]) -> str:
 
 
 def build_avoid_set(rules: list[dict]) -> set[str]:
-    """Flatten all avoid-list champions into a lowercase set for filtering."""
+    """Flatten all avoid-list champions into a normalized set for filtering."""
     out: set[str] = set()
     for r in rules:
         for c in r["champions"]:
-            out.add(c.lower())
+            out.add(_norm_champ(c))
     return out

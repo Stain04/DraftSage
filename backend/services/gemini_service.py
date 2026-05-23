@@ -199,6 +199,11 @@ OUTPUT — return ONLY valid JSON, zero extra text:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _norm_champ(name: str) -> str:
+    """Normalize champion name for comparison — strips apostrophes, spaces, periods."""
+    return name.strip().lower().replace("'", "").replace(" ", "").replace(".", "")
+
+
 def _format_team(picks: list[str]) -> str:
     if not picks:
         return "  (none yet)"
@@ -253,12 +258,12 @@ def _enforce_role_viability(result: dict, role: str) -> None:
         name = rec.get("champion", "").strip()
         if not name:
             continue
-        name_lower = name.lower()
+        name_norm = _norm_champ(name)
 
-        # Find champion in T (case-insensitive)
+        # Find champion in T (normalized comparison)
         matched_traits = None
         for champ, traits in _T.items():
-            if champ.lower() == name_lower:
+            if _norm_champ(champ) == name_norm:
                 matched_traits = traits
                 break
 
@@ -313,7 +318,7 @@ def _attach_deterministic_avoidance(
 
     for rule in avoid_rules:
         for champ in rule["champions"]:
-            key = champ.lower()
+            key = _norm_champ(champ)
             if key in drafted or key in seen:
                 continue
             entries.append({"champion": champ, "reason": rule["reason"]})
@@ -369,7 +374,7 @@ def _enforce_filters(
         return
 
     def keep(rec: dict) -> bool:
-        name = rec.get("champion", "").strip().lower()
+        name = _norm_champ(rec.get("champion", ""))
         if not name or name in drafted:
             return False
         if name in blacklist:
@@ -405,7 +410,7 @@ def _enforce_pool_filter(result: dict, champion_pool: list[str] | None) -> None:
     if not recs:
         return
 
-    pool_lower = {c.strip().lower() for c in champion_pool if c}
+    pool_norm = {_norm_champ(c) for c in champion_pool if c}
 
     in_pool:     list[dict] = []
     out_of_pool: list[str]  = []
@@ -413,7 +418,7 @@ def _enforce_pool_filter(result: dict, champion_pool: list[str] | None) -> None:
         name = rec.get("champion", "").strip()
         if not name:
             continue
-        if name.lower() in pool_lower:
+        if _norm_champ(name) in pool_norm:
             in_pool.append(rec)
         else:
             out_of_pool.append(name)
@@ -451,7 +456,7 @@ def _enforce_diversity(result: dict) -> None:
     seen: set[str] = set()
     unique: list[dict] = []
     for rec in recs:
-        name = rec.get("champion", "").strip().lower()
+        name = _norm_champ(rec.get("champion", ""))
         if name and name not in seen:
             seen.add(name)
             unique.append(rec)
@@ -587,7 +592,7 @@ async def get_draft_suggestions(
                 easy = data.get("easy_matchups", [])
                 seen_this_enemy: set[str] = set()
                 for c in easy:
-                    cname = c["champion"].lower()
+                    cname = _norm_champ(c["champion"])
                     if cname not in seen_this_enemy:
                         matchup_losses[cname] += 1
                         seen_this_enemy.add(cname)
@@ -642,7 +647,7 @@ async def get_draft_suggestions(
 
     # ── Build the intelligence-rich user message ──────────────────────────────
     intel_block = build_intelligence_block(analysis, dmg, role)
-    drafted_names = {p.split("(")[0].strip().lower() for p in ally_picks + enemy_picks if p}
+    drafted_names = {_norm_champ(p.split("(")[0]) for p in ally_picks + enemy_picks if p}
     excluded_str  = ", ".join(sorted(drafted_names)) if drafted_names else "None"
 
     if ban_mode:
