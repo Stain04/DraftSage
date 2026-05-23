@@ -199,9 +199,15 @@ def derive_avoidance(
             })
 
     # Rule 7 — enemy stacks armor tanks → flag pure AD scalers
-    # Pure AD scaler: ap field is 0, scaling >= 1, no AP damage
-    armor_stackers = {"Rammus", "Malphite", "Tahm Kench", "K'Sante", "Ornn", "Maokai"}
-    enemy_armor = [p for p in enemy_picks if p.split("(")[0].strip() in armor_stackers]
+    # Armor tank: frontline >= 2 and hard_cc >= 2 (traditional tanks that build
+    # Thornmail / Randuin's / Frozen Heart). Trait-driven — no hardcoded set.
+    armor_tank_pool = _champs_matching(
+        lambda t: t.get("frontline", 0) >= 2 and t.get("hard_cc", 0) >= 2,
+    )
+    enemy_armor = [
+        p.split("(")[0].strip() for p in enemy_picks
+        if p.split("(")[0].strip() in armor_tank_pool
+    ]
     if len(enemy_armor) >= 2:
         pool = _champs_matching(
             lambda t: t.get("ap", -1) == 0
@@ -221,8 +227,16 @@ def derive_avoidance(
             })
 
     # Rule 8 — enemy stacks MR tanks → flag pure AP scalers
-    mr_stackers = {"Galio", "Kassadin", "Sion", "Sett", "Maokai"}
-    enemy_mr = [p for p in enemy_picks if p.split("(")[0].strip() in mr_stackers]
+    # MR tank: AP-damage tank (frontline >= 2, ap == 1). These champions
+    # naturally build Spirit Visage / Force of Nature / Abyssal Mask.
+    # Trait-driven — no hardcoded set.
+    mr_tank_pool = _champs_matching(
+        lambda t: t.get("frontline", 0) >= 2 and t.get("ap", -1) == 1,
+    )
+    enemy_mr = [
+        p.split("(")[0].strip() for p in enemy_picks
+        if p.split("(")[0].strip() in mr_tank_pool
+    ]
     if len(enemy_mr) >= 2:
         pool = _champs_matching(
             lambda t: t.get("ap", -1) == 1

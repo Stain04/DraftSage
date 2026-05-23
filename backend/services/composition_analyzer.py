@@ -523,32 +523,38 @@ def detect_archetype(profile: dict, picks: list[str]) -> str:
     """
     Detect dominant comp archetype from a team profile.
     Returns one of: engage, poke, pick, splitpush, teamfight, dive, scaling, protect, balanced.
+
+    Thresholds scale with team size so archetypes are detected during draft
+    (2-3 picks) as well as full 5-man comps.
     """
     n = max(1, len(picks))
+    s = n / 5.0  # scale factor — 1.0 for 5-man, 0.4 for 2 picks
 
-    # Hard signals first
-    if profile["dive"] >= 3 and profile["engage"] >= 2:
+    # Hard signals first (scaled)
+    if profile["dive"] >= 3 * s and profile["engage"] >= 2 * s:
         return "dive"
-    if profile["splitpush"] >= 3:
+    if profile["splitpush"] >= 3 * s:
         return "splitpush"
-    if profile["pick"] >= 3:
+    if profile["pick"] >= 3 * s:
         return "pick"
-    if profile["poke"] >= 4:
+    if profile["poke"] >= 4 * s:
         return "poke"
-    if profile["engage"] >= 4 and profile["frontline"] >= 2:
+    if profile["engage"] >= 4 * s and profile["frontline"] >= 2 * s:
         return "engage"
-    if profile["scaling"] >= 5:
+    if profile["scaling"] >= 5 * s:
         return "scaling"
 
-    # Protect-the-carry: hypercarry + 2+ peel sources
+    # Protect-the-carry: hypercarry + peel sources (scaled)
     has_hypercarry = any(
         get_traits(p).get("scaling", 0) >= 2 and get_traits(p).get("ranged", 0) >= 2
         for p in picks
     )
-    if has_hypercarry and profile["peel"] >= 4:
+    if has_hypercarry and profile["peel"] >= 4 * s:
         return "protect"
 
-    if profile["frontline"] + profile["hard_cc"] >= 5 and n >= 4:
+    # Teamfight: high frontline AND hard CC (not just sum — avoids poke+CC
+    # combos like Lux+Malphite triggering teamfight)
+    if profile["frontline"] >= 2 * s and profile["hard_cc"] >= 3 * s and n >= 3:
         return "teamfight"
 
     return "balanced"

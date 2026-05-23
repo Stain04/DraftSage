@@ -588,8 +588,12 @@ async def get_draft_suggestions(
                         blacklist_names.add(c["champion"].lower())
                 if is_lane_opponent:
                     verified_counters = [c["champion"] for c in data.get("counters", [])]
-        except Exception:
-            pass  # Soft fail — analyzer still works
+        except Exception as e:
+            # Log the error so scraper breakage is visible — without this,
+            # a Lolalytics HTML change silently disables counter data,
+            # blacklists, and tier lists with zero indication.
+            print(f"[DraftSage] WARNING: Lolalytics/OP.GG fetch failed: {e}", flush=True)
+            # Soft fail — engine still works without live data, just less informed
 
     # ── Stage 4: Avoidance engine ─────────────────────────────────────────────
     avoid_rules     = derive_avoidance(ally_picks, enemy_picks, analysis, role)
