@@ -38,7 +38,7 @@ for i in range(1, 11):
 
 # Qwen3-32B — active reasoning model on Groq.
 GROQ_MODEL     = "qwen/qwen3-32b"
-GROQ_FALLBACKS = []  # disabled — Qwen3 only
+GROQ_FALLBACKS = ["llama-3.3-70b-versatile", "llama3-70b-8192"]
 
 # ── Global round-robin key counter ────────────────────────────────────────
 # Each request gets the NEXT key in sequence (wraps around).
@@ -695,7 +695,9 @@ Return ONLY valid JSON."""
         gap_pool     = _build_gap_filling_pool(analysis, role)
         gap_sections = []
         for gap_label, champs in gap_pool.items():
-            gap_sections.append(f"  {gap_label}: {', '.join(champs)}")
+            display = champs[:15]
+            suffix = f" (+{len(champs)-15} more)" if len(champs) > 15 else ""
+            gap_sections.append(f"  {gap_label}: {', '.join(display)}{suffix}")
         gap_pool_block = ""
         if gap_sections:
             gap_pool_block = (
@@ -707,7 +709,11 @@ Return ONLY valid JSON."""
             )
 
         role_pool        = _build_role_pool(role)
-        role_pool_str    = ", ".join(role_pool) if role_pool else "(no T data for this role)"
+        # Truncate to 30 champions to keep prompt under token limits
+        role_pool_display = role_pool[:30]
+        role_pool_str    = ", ".join(role_pool_display) if role_pool_display else "(no T data for this role)"
+        if len(role_pool) > 30:
+            role_pool_str += f" (+{len(role_pool) - 30} more)"
         role_pool_block  = (
             f"\n{'=' * 55}\n"
             f"⛔ ROLE LOCK — {role.upper()} ONLY\n"
