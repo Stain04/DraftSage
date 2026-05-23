@@ -80,16 +80,16 @@ async def get_champion_by_name(name: str) -> dict | None:
 async def get_champion_difficulty(name: str) -> str | None:
     """
     Look up champion difficulty from Riot Data Dragon's info.difficulty (1-10).
-    Returns 'Easy' (1-3), 'Medium' (4-6), or 'Hard' (7-10).
+    Returns 'Easy' (1-5), 'Medium' (6-7), or 'Hard' (8-10).
     Returns None if champion not found.
     """
     champ = await get_champion_by_name(name)
     if not champ:
         return None
     diff = champ.get("info", {}).get("difficulty", 0)
-    if diff <= 3:
+    if diff <= 5:
         return "Easy"
-    elif diff <= 6:
+    elif diff <= 7:
         return "Medium"
     else:
         return "Hard"
