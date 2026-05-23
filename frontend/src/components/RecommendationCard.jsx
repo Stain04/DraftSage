@@ -3,7 +3,7 @@ import {
   Zap, Target, Star, AlertTriangle, Swords, FlaskConical,
   Layers, ChevronDown, ChevronUp, Shield, Clock, Users, TrendingUp,
 } from "lucide-react";
-import { getChampionIconUrl } from "../api/riotApi";
+import { getChampionIconUrl, getChampionSplashUrl } from "../api/riotApi";
 
 // ── Configs ───────────────────────────────────────────────────────────────────
 
@@ -49,38 +49,52 @@ export default function RecommendationCard({ rec, rank, isTopPick = false, banMo
   const tier    = TIER_CONFIG[rec.patch_tier]          || TIER_CONFIG.B;
   const iconUrl = getChampionIconUrl(rec.champion);
 
+  const splashUrl = getChampionSplashUrl(rec.champion);
+
   return (
     <div
-      className={`card-gold rounded-2xl p-5 animate-bounce-in transition-all hover:scale-[1.01]
+      className={`card-gold rounded-2xl overflow-hidden animate-bounce-in transition-all hover:scale-[1.01]
         ${isTopPick ? "ring-1 ring-gold/40 shadow-gold" : ""}`}
       style={{ animationDelay: `${rank * 100}ms` }}
     >
-      {/* ── Header ── */}
-      <div className="flex items-center gap-4 mb-4">
-        <div className="relative flex-shrink-0">
+      {/* ── Splash art header ── */}
+      <div className="relative h-36 overflow-hidden">
+        <img
+          src={splashUrl}
+          alt={rec.champion}
+          className="w-full h-full object-cover object-top"
+          onError={(e) => { e.target.style.display = "none"; }}
+        />
+        {/* gradient fade into card */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-navy-900" />
+        {/* rank badge */}
+        <div className={`absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shadow-lg
+          ${isTopPick ? "bg-gold-gradient text-navy-900" : "bg-navy-800/90 border border-navy-600 text-navy-300"}`}>
+          #{rank + 1}
+        </div>
+        {isTopPick && (
+          <span className="absolute top-3 left-3 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gold/90 text-navy-900 font-bold shadow">
+            <Star size={10} fill="currentColor" /> Best Pick
+          </span>
+        )}
+        {/* champion icon + name overlaid at bottom */}
+        <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 flex items-end gap-3">
           <img
             src={iconUrl}
             alt={rec.champion}
-            className="w-16 h-16 rounded-xl object-cover border-2 border-gold/40 shadow-champ"
+            className="w-12 h-12 rounded-xl object-cover border-2 border-gold/50 shadow-champ flex-shrink-0"
             onError={(e) => { e.target.src = `https://ddragon.leagueoflegends.com/cdn/14.10.1/img/champion/${rec.champion}.png`; }}
           />
-          <div className={`absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-            ${isTopPick ? "bg-gold-gradient text-navy-900 shadow-gold" : "bg-navy-700 border border-navy-500 text-navy-300"}`}>
-            #{rank + 1}
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-lg text-white drop-shadow">{rec.champion}</h3>
           </div>
         </div>
+      </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1.5">
-            <h3 className="font-bold text-lg text-white">{rec.champion}</h3>
-            {isTopPick && (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gold/20 text-gold border border-gold/30 font-semibold">
-                <Star size={10} fill="currentColor" /> Best Pick
-              </span>
-            )}
-          </div>
-          {/* Badges */}
-          <div className="flex flex-wrap gap-1.5">
+      {/* ── Body ── */}
+      <div className="p-5 pt-3">
+        {/* Badges */}
+        <div className="flex flex-wrap gap-1.5 mb-4">
             {/* Difficulty */}
             <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border ${diff.bg} ${diff.text} ${diff.border}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${diff.dot}`} />
@@ -130,129 +144,140 @@ export default function RecommendationCard({ rec, rank, isTopPick = false, banMo
         </div>
       )}
 
-      <div className="divider-gold mb-4" />
+        <div className="divider-gold mb-4" />
 
-      {/* ── Analysis ── */}
-      <div className="mb-3">
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <Zap size={13} className="text-gold flex-shrink-0" />
-          <span className="text-xs font-semibold text-gold uppercase tracking-wider">Analysis</span>
+        {/* ── Analysis ── */}
+        <div className="mb-3">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Zap size={13} className="text-gold flex-shrink-0" />
+            <span className="text-xs font-semibold text-gold uppercase tracking-wider">Analysis</span>
+          </div>
+          <p className="text-sm text-navy-200 leading-relaxed">{rec.reason}</p>
         </div>
-        <p className="text-sm text-navy-200 leading-relaxed">{rec.reason}</p>
-      </div>
 
-      {/* ── Win Condition ── */}
-      <div className="mb-3 p-3 rounded-lg bg-navy-900/50 border border-emerald-500/20">
-        <div className="flex items-center gap-1.5 mb-1">
-          <Target size={13} className="text-emerald-400 flex-shrink-0" />
-          <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Win Condition</span>
+        {/* ── Win Condition ── */}
+        <div className="mb-3 p-3 rounded-lg bg-navy-900/50 border border-emerald-500/20">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Target size={13} className="text-emerald-400 flex-shrink-0" />
+            <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Win Condition</span>
+          </div>
+          <p className="text-sm text-emerald-300 leading-relaxed">{rec.win_condition}</p>
         </div>
-        <p className="text-sm text-emerald-300 leading-relaxed">{rec.win_condition}</p>
-      </div>
 
-      {/* ── Power Spike + Summoner Spells row ── */}
-      <div className="flex gap-2 mb-3 flex-wrap">
-        {rec.power_spike && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs">
-            <Clock size={12} className="text-amber-400" />
-            <span className="text-amber-300 font-medium">{rec.power_spike}</span>
+        {/* ── Power Spike + Summoner Spells row ── */}
+        <div className="flex gap-2 mb-3 flex-wrap">
+          {rec.power_spike && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs">
+              <Clock size={12} className="text-amber-400" />
+              <span className="text-amber-300 font-medium">{rec.power_spike}</span>
+            </div>
+          )}
+          {rec.summoner_spells?.length > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-navy-800/60 border border-navy-600 text-xs">
+              <Zap size={12} className="text-navy-400" />
+              <span className="text-navy-300">{rec.summoner_spells.join(" + ")}</span>
+            </div>
+          )}
+        </div>
+
+        {/* ── Synergies & Counters with mini icons ── */}
+        {(rec.synergies?.length > 0 || rec.counters?.length > 0) && (
+          <div className="flex gap-3 text-xs mb-3">
+            {rec.synergies?.length > 0 && (
+              <div className="flex-1">
+                <span className="text-navy-400 font-medium block mb-1">Synergizes with</span>
+                <div className="flex flex-wrap gap-1">
+                  {rec.synergies.map((s) => (
+                    <span key={s} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/20">
+                      <img src={getChampionIconUrl(s)} alt={s}
+                        className="w-4 h-4 rounded object-cover"
+                        onError={(e) => { e.target.style.display="none"; }} />
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {rec.counters?.length > 0 && (
+              <div className="flex-1">
+                <span className="text-navy-400 font-medium block mb-1">Counters</span>
+                <div className="flex flex-wrap gap-1">
+                  {rec.counters.map((c) => (
+                    <span key={c} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/20">
+                      <img src={getChampionIconUrl(c)} alt={c}
+                        className="w-4 h-4 rounded object-cover"
+                        onError={(e) => { e.target.style.display="none"; }} />
+                      {c}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
-        {rec.summoner_spells?.length > 0 && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-navy-800/60 border border-navy-600 text-xs">
-            <Zap size={12} className="text-navy-400" />
-            <span className="text-navy-300">{rec.summoner_spells.join(" + ")}</span>
+
+        {/* ── Score Breakdown ── */}
+        {rec.score_breakdown && (rec.score_breakdown.lane != null || rec.score_breakdown.team_fit != null) && (
+          <div className="grid grid-cols-4 gap-1.5 mb-3">
+            {[
+              { key: "lane",          label: "Lane",   max: 40, color: "bg-blue-500"    },
+              { key: "team_fit",      label: "Fit",    max: 25, color: "bg-emerald-500" },
+              { key: "threat_answer", label: "Threat", max: 20, color: "bg-red-500"     },
+              { key: "meta",          label: "Meta",   max: 15, color: "bg-purple-500"  },
+            ].map(({ key, label, max, color }) => {
+              const val = Number(rec.score_breakdown[key] ?? 0);
+              const pct = Math.min(100, (val / max) * 100);
+              return (
+                <div key={key} className="p-1.5 rounded-md bg-navy-900/60 border border-navy-700">
+                  <div className="flex items-baseline justify-between mb-0.5">
+                    <span className="text-[10px] text-navy-400 uppercase tracking-wider">{label}</span>
+                    <span className="text-[11px] text-white font-semibold">{val}<span className="text-navy-500">/{max}</span></span>
+                  </div>
+                  <div className="h-1 w-full rounded-full bg-navy-800 overflow-hidden">
+                    <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
+
+        {/* ── Expandable Details ── */}
+        {(rec.early_game_plan || rec.team_fighting_role) && (
+          <>
+            <button
+              onClick={() => setExpanded((p) => !p)}
+              className="w-full flex items-center justify-center gap-1.5 py-2 text-xs text-navy-400 hover:text-white transition-colors border-t border-navy-700 mt-1"
+            >
+              {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              {expanded ? "Hide" : "Show"} game plan
+            </button>
+
+            {expanded && (
+              <div className="mt-3 space-y-2 animate-fade-in">
+                {rec.early_game_plan && (
+                  <div className="p-3 rounded-lg bg-navy-900/50 border border-navy-600">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Shield size={12} className="text-blue-400" />
+                      <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Laning Phase</span>
+                    </div>
+                    <p className="text-xs text-navy-200 leading-relaxed">{rec.early_game_plan}</p>
+                  </div>
+                )}
+                {rec.team_fighting_role && (
+                  <div className="p-3 rounded-lg bg-navy-900/50 border border-navy-600">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Users size={12} className="text-purple-400" />
+                      <span className="text-xs font-semibold text-purple-400 uppercase tracking-wider">Teamfight Role</span>
+                    </div>
+                    <p className="text-xs text-navy-200 leading-relaxed">{rec.team_fighting_role}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
-
-      {/* ── Synergies & Counters ── */}
-      {(rec.synergies?.length > 0 || rec.counters?.length > 0) && (
-        <div className="flex gap-3 text-xs mb-3">
-          {rec.synergies?.length > 0 && (
-            <div className="flex-1">
-              <span className="text-navy-400 font-medium block mb-1">Synergizes with</span>
-              <div className="flex flex-wrap gap-1">
-                {rec.synergies.map((s) => (
-                  <span key={s} className="px-2 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/20">{s}</span>
-                ))}
-              </div>
-            </div>
-          )}
-          {rec.counters?.length > 0 && (
-            <div className="flex-1">
-              <span className="text-navy-400 font-medium block mb-1">Counters</span>
-              <div className="flex flex-wrap gap-1">
-                {rec.counters.map((c) => (
-                  <span key={c} className="px-2 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/20">{c}</span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Score Breakdown (compact, always visible if available) ── */}
-      {rec.score_breakdown && (rec.score_breakdown.lane != null || rec.score_breakdown.team_fit != null) && (
-        <div className="grid grid-cols-4 gap-1.5 mb-3">
-          {[
-            { key: "lane",          label: "Lane",   max: 40, color: "bg-blue-500"    },
-            { key: "team_fit",      label: "Fit",    max: 25, color: "bg-emerald-500" },
-            { key: "threat_answer", label: "Threat", max: 20, color: "bg-red-500"     },
-            { key: "meta",          label: "Meta",   max: 15, color: "bg-purple-500"  },
-          ].map(({ key, label, max, color }) => {
-            const val = Number(rec.score_breakdown[key] ?? 0);
-            const pct = Math.min(100, (val / max) * 100);
-            return (
-              <div key={key} className="p-1.5 rounded-md bg-navy-900/60 border border-navy-700">
-                <div className="flex items-baseline justify-between mb-0.5">
-                  <span className="text-[10px] text-navy-400 uppercase tracking-wider">{label}</span>
-                  <span className="text-[11px] text-white font-semibold">{val}<span className="text-navy-500">/{max}</span></span>
-                </div>
-                <div className="h-1 w-full rounded-full bg-navy-800 overflow-hidden">
-                  <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Expandable Details ── */}
-      {(rec.early_game_plan || rec.team_fighting_role) && (
-        <>
-          <button
-            onClick={() => setExpanded((p) => !p)}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs text-navy-400 hover:text-white transition-colors border-t border-navy-700 mt-1"
-          >
-            {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            {expanded ? "Hide" : "Show"} game plan
-          </button>
-
-          {expanded && (
-            <div className="mt-3 space-y-2 animate-fade-in">
-              {rec.early_game_plan && (
-                <div className="p-3 rounded-lg bg-navy-900/50 border border-navy-600">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Shield size={12} className="text-blue-400" />
-                    <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Laning Phase</span>
-                  </div>
-                  <p className="text-xs text-navy-200 leading-relaxed">{rec.early_game_plan}</p>
-                </div>
-              )}
-              {rec.team_fighting_role && (
-                <div className="p-3 rounded-lg bg-navy-900/50 border border-navy-600">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Users size={12} className="text-purple-400" />
-                    <span className="text-xs font-semibold text-purple-400 uppercase tracking-wider">Teamfight Role</span>
-                  </div>
-                  <p className="text-xs text-navy-200 leading-relaxed">{rec.team_fighting_role}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
     </div>
   );
 }
