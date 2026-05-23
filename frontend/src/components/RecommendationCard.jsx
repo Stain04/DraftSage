@@ -125,8 +125,6 @@ export default function RecommendationCard({ rec, rank, isTopPick = false, banMo
               </span>
             )}
           </div>
-        </div>
-      </div>
 
       {/* ── Confidence meter ── */}
       {rec.score_breakdown?.confidence != null && (
