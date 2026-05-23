@@ -398,7 +398,7 @@ GAP_RULES = [
     {
         "axis": "peel", "target": 2, "label": "Peel for the backline",
         "condition": lambda ep, ap, picks: any(
-            get_traits(p).get("scaling", 0) >= 2 and get_traits(p).get("ranged", 0) >= 2
+            get_traits(p).get("scaling", 0) >= 2
             for p in picks
         ),
     },
@@ -619,6 +619,27 @@ def detect_enemy_threats(enemy_profile: dict, enemy_picks: list[str]) -> list[di
             "threat": "Forced engage",
             "severity": "medium",
             "why": f"Enemy will force fights on their terms (engage {enemy_profile['engage']}). You need disengage or zone control.",
+        })
+
+    if enemy_profile["sustain"] >= 3:
+        healers = [p for p in enemy_picks if get_traits(p).get("sustain", 0) >= 2]
+        threats.append({
+            "threat": "Heavy sustain",
+            "severity": "medium",
+            "why": f"Enemy has strong healing/shielding ({', '.join(healers[:3])}). Fights become wars of attrition — buy anti-heal early.",
+        })
+
+    # Protect-the-carry: enemy hypercarry + peel = must dive or burst them
+    enemy_hypercarries = [
+        p for p in enemy_picks
+        if get_traits(p).get("scaling", 0) >= 2 and get_traits(p).get("ranged", 0) >= 2
+    ]
+    if enemy_hypercarries and enemy_profile["peel"] >= 3:
+        threats.append({
+            "threat": "Protect-the-carry",
+            "severity": "high",
+            "why": f"Enemy has hypercarry ({', '.join(enemy_hypercarries[:2])}) behind {enemy_profile['peel']} peel. "
+                   "You must dive the backline or burst through peel before they scale.",
         })
 
     # Order high severity first, cap at 4

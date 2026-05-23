@@ -131,9 +131,11 @@ def get_summoner_spells(
         return ["Flash", "Teleport"]
 
     if role == "Mid":
-        # Mages with no escape want Flash + Teleport (Ryze, Vladimir style)
+        # Scaling mages with no escape want Flash + Teleport (Ryze, Vladimir style)
+        # "dive" serves as the mobility proxy — champions with dive >= 1 have
+        # gap closers and don't need TP for safety.
         traits = get_traits(champ)
-        if traits.get("scaling", 0) >= 2 and traits.get("mobile", 0) == 0:
+        if traits.get("scaling", 0) >= 2 and traits.get("dive", 0) == 0:
             return ["Flash", "Teleport"]
         # Default mid is Flash + Ignite for kill pressure
         return ["Flash", "Ignite"]
