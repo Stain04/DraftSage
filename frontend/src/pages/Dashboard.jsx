@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
-import { Brain, History, Zap, User, LogOut, Trophy, Calendar, KeyRound, Eye, EyeOff, CheckCircle, X, ExternalLink, Shield } from "lucide-react";
+import { Brain, History, Zap, User, LogOut, Trophy, Calendar, KeyRound, Eye, EyeOff, CheckCircle, X, ExternalLink, Shield, Link2, Unlink, Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../context/AuthContext";
 import { toast } from "react-hot-toast";
+import { linkRiotAccount, unlinkRiotAccount, fetchMyProfile, getRegions } from "../api/summonerApi";
 
 const USAGE_KEY = "draftsage_daily_usage";
 
@@ -92,6 +93,218 @@ function DraftHistoryList({ userId }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+
+// ── Riot Account Linking Component ──────────────────────────────────────────
+
+const TIER_COLORS = {
+  IRON: "text-gray-400",
+  BRONZE: "text-orange-400",
+  SILVER: "text-gray-300",
+  GOLD: "text-yellow-400",
+  PLATINUM: "text-cyan-400",
+  EMERALD: "text-emerald-400",
+  DIAMOND: "text-blue-400",
+  MASTER: "text-purple-400",
+  GRANDMASTER: "text-red-400",
+  CHALLENGER: "text-gold",
+  UNRANKED: "text-navy-500",
+};
+
+function RiotAccountSection({ user }) {
+  const meta = user?.user_metadata || {};
+  const isLinked = !!meta.riot_puuid;
+
+  const [gameName, setGameName] = useState("");
+  const [tagLine, setTagLine] = useState("");
+  const [region, setRegion] = useState("na1");
+  const [regions, setRegions] = useState([]);
+  const [linking, setLinking] = useState(false);
+  const [profile, setProfile] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+
+  // Load regions on mount
+  useEffect(() => {
+    getRegions().then(setRegions).catch(() => {});
+  }, []);
+
+  // Auto-fetch profile if linked
+  useEffect(() => {
+    if (isLinked) {
+      setLoadingProfile(true);
+      fetchMyProfile()
+        .then(setProfile)
+        .catch(() => {})
+        .finally(() => setLoadingProfile(false));
+    }
+  }, [isLinked]);
+
+  const handleLink = async (e) => {
+    e.preventDefault();
+    if (!gameName.trim() || !tagLine.trim()) return toast.error("Enter your Riot ID (name#tag).");
+    setLinking(true);
+    try {
+      await linkRiotAccount(gameName.trim(), tagLine.trim(), region);
+      toast.success("Riot account linked!");
+      window.location.reload(); // refresh to get updated user_metadata
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to link account.");
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  const handleUnlink = async () => {
+    try {
+      await unlinkRiotAccount();
+      toast.success("Riot account unlinked.");
+      setProfile(null);
+      window.location.reload();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to unlink.");
+    }
+  };
+
+  const ranked = profile?.ranked;
+  const mastery = profile?.mastery || [];
+  const performance = profile?.championPerformance || [];
+
+  return (
+    <div className="card rounded-2xl p-6 mt-4 animate-slide-up" style={{ animationDelay: "0.25s" }}>
+      <div className="flex items-center gap-2 mb-4">
+        <Link2 size={16} className="text-navy-400" />
+        <h2 className="font-semibold text-white text-sm">Riot Account</h2>
+      </div>
+
+      {isLinked ? (
+        <div className="space-y-4">
+          {/* Linked account info */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-white font-semibold">{meta.riot_game_name}#{meta.riot_tag_line}</p>
+              <p className="text-xs text-navy-500">{meta.riot_region?.toUpperCase()}</p>
+            </div>
+            <button
+              onClick={handleUnlink}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-navy-600 text-navy-400 hover:border-red-500/50 hover:text-red-400 transition-all text-xs"
+            >
+              <Unlink size={12} /> Unlink
+            </button>
+          </div>
+
+          {loadingProfile ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 size={20} className="text-gold animate-spin" />
+            </div>
+          ) : profile ? (
+            <>
+              {/* Ranked stats */}
+              {ranked && (
+                <div className="rounded-xl border border-navy-700 bg-navy-800/40 p-4">
+                  <p className="text-xs text-navy-500 mb-2">Ranked Solo/Duo</p>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-2xl font-bold ${TIER_COLORS[ranked.tier] || "text-white"}`}>
+                      {ranked.tier === "UNRANKED" ? "Unranked" : `${ranked.tier} ${ranked.rank}`}
+                    </span>
+                    {ranked.tier !== "UNRANKED" && (
+                      <span className="text-xs text-navy-400">{ranked.leaguePoints} LP</span>
+                    )}
+                  </div>
+                  {ranked.tier !== "UNRANKED" && (
+                    <p className="text-xs text-navy-500 mt-1">
+                      {ranked.wins}W {ranked.losses}L — {ranked.winRate}% WR
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Top mastery */}
+              {mastery.length > 0 && (
+                <div>
+                  <p className="text-xs text-navy-500 mb-2">Top Champions by Mastery</p>
+                  <div className="flex flex-wrap gap-2">
+                    {mastery.slice(0, 8).map((m) => (
+                      <div key={m.championId} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-navy-800 border border-navy-700">
+                        <span className="text-xs text-white font-medium">#{m.championId}</span>
+                        <span className="text-xs text-navy-500">Lv{m.championLevel}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Recent performance */}
+              {performance.length > 0 && (
+                <div>
+                  <p className="text-xs text-navy-500 mb-2">Recent Performance (last 20 ranked)</p>
+                  <div className="space-y-1.5">
+                    {performance.slice(0, 6).map((p) => (
+                      <div key={p.champion} className="flex items-center justify-between text-xs py-1 border-b border-navy-800 last:border-0">
+                        <span className="text-white">{p.champion}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-navy-400">{p.games} games</span>
+                          <span className={p.winRate >= 50 ? "text-emerald-400" : "text-red-400"}>
+                            {p.winRate}% WR
+                          </span>
+                          <span className="text-navy-500">{p.kda} KDA</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : null}
+        </div>
+      ) : (
+        <form onSubmit={handleLink} className="space-y-3">
+          <p className="text-xs text-navy-500 mb-1">
+            Link your Riot account to see ranked stats, mastery, and import your champion pool.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={gameName}
+              onChange={(e) => setGameName(e.target.value)}
+              placeholder="Game name"
+              className="flex-1 px-3 py-2 bg-navy-800 border border-navy-600 rounded-xl text-sm text-white placeholder-navy-500
+                         focus:outline-none focus:border-gold/60 focus:ring-1 focus:ring-gold/30 transition-all"
+              required
+            />
+            <input
+              type="text"
+              value={tagLine}
+              onChange={(e) => setTagLine(e.target.value)}
+              placeholder="Tag (NA1)"
+              className="w-24 px-3 py-2 bg-navy-800 border border-navy-600 rounded-xl text-sm text-white placeholder-navy-500
+                         focus:outline-none focus:border-gold/60 focus:ring-1 focus:ring-gold/30 transition-all"
+              required
+            />
+          </div>
+          <select
+            value={region}
+            onChange={(e) => setRegion(e.target.value)}
+            className="w-full px-3 py-2 bg-navy-800 border border-navy-600 rounded-xl text-sm text-white
+                       focus:outline-none focus:border-gold/60 focus:ring-1 focus:ring-gold/30 transition-all"
+          >
+            {regions.map((r) => (
+              <option key={r} value={r}>{r.toUpperCase()}</option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            disabled={linking}
+            className="btn-gold py-2.5 px-6 rounded-xl text-sm font-semibold flex items-center gap-2 disabled:opacity-60"
+          >
+            {linking
+              ? <Loader2 size={14} className="animate-spin" />
+              : <><Link2 size={14} /> Link Riot Account</>}
+          </button>
+        </form>
+      )}
     </div>
   );
 }
@@ -289,6 +502,9 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* Riot Account Linking */}
+        <RiotAccountSection user={user} />
 
         {/* Draft History */}
         <div className="card rounded-2xl p-6 mt-4 animate-slide-up" style={{ animationDelay: "0.3s" }}>

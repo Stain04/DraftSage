@@ -14,6 +14,7 @@ load_dotenv()
 from routes.draft import router as draft_router
 from routes.auth import router as auth_router
 from routes.payments import router as payments_router
+from routes.summoner import router as summoner_router
 from services.riot_service import get_all_champions
 
 
@@ -76,6 +77,7 @@ app.add_middleware(
 app.include_router(draft_router)
 app.include_router(auth_router)
 app.include_router(payments_router)
+app.include_router(summoner_router)
 
 
 @app.get("/")
