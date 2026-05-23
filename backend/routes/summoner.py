@@ -57,7 +57,7 @@ async def link_riot_account(req: LinkRequest, request: Request):
         raise HTTPException(status_code=400, detail=f"Invalid region. Choose from: {', '.join(REGIONS)}")
 
     # Validate Riot ID exists
-    account = await get_puuid(req.game_name, req.tag_line)
+    account = await get_puuid(req.game_name, req.tag_line, region)
     if not account:
         raise HTTPException(status_code=404, detail="Riot account not found. Check your Riot ID (name#tag).")
 

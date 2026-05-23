@@ -16,31 +16,37 @@ import httpx
 
 RIOT_API_KEY = os.environ.get("RIOT_API_KEY", "")
 
-# Regional routing (for account-v1, match-v5)
-REGIONAL_BASE = {
-    "na1":   "https://americas.api.riotgames.com",
-    "br1":   "https://americas.api.riotgames.com",
-    "la1":   "https://americas.api.riotgames.com",
-    "la2":   "https://americas.api.riotgames.com",
-    "euw1":  "https://europe.api.riotgames.com",
-    "eun1":  "https://europe.api.riotgames.com",
-    "tr1":   "https://europe.api.riotgames.com",
-    "ru":    "https://europe.api.riotgames.com",
-    "me1":   "https://europe.api.riotgames.com",
-    "kr":    "https://asia.api.riotgames.com",
-    "jp1":   "https://asia.api.riotgames.com",
-    "oc1":   "https://sea.api.riotgames.com",
-    "ph2":   "https://sea.api.riotgames.com",
-    "sg2":   "https://sea.api.riotgames.com",
-    "th2":   "https://sea.api.riotgames.com",
-    "tw2":   "https://sea.api.riotgames.com",
-    "vn2":   "https://sea.api.riotgames.com",
+# Platform routing (for league-v4, champion-mastery-v4, summoner-v4)
+PLATFORM_BASE = {
+    "na1":   "https://na1.api.riotgames.com",
+    "br1":   "https://br1.api.riotgames.com",
+    "la1":   "https://la1.api.riotgames.com",
+    "la2":   "https://la2.api.riotgames.com",
+    "euw1":  "https://euw1.api.riotgames.com",
+    "eun1":  "https://eun1.api.riotgames.com",
+    "tr1":   "https://tr1.api.riotgames.com",
+    "ru":    "https://ru.api.riotgames.com",
+    "me1":   "https://me1.api.riotgames.com",
+    "kr":    "https://kr.api.riotgames.com",
+    "jp1":   "https://jp1.api.riotgames.com",
+    "oc1":   "https://oc1.api.riotgames.com",
+    "ph2":   "https://ph2.api.riotgames.com",
+    "sg2":   "https://sg2.api.riotgames.com",
+    "th2":   "https://th2.api.riotgames.com",
+    "tw2":   "https://tw2.api.riotgames.com",
+    "vn2":   "https://vn2.api.riotgames.com",
 }
 
-# Platform routing (for league-v4, champion-mastery-v4, summoner-v4)
-PLATFORM_BASE = {k: f"https://{k}.api.riotgames.com" for k in REGIONAL_BASE}
+# Account/Match regional routing — maps game region to the correct
+# regional shard for account-v1 and match-v5 lookups.
+ACCOUNT_REGION = {
+    "na1": "americas", "br1": "americas", "la1": "americas", "la2": "americas",
+    "euw1": "europe", "eun1": "europe", "tr1": "europe", "ru": "europe", "me1": "europe",
+    "kr": "asia", "jp1": "asia",
+    "oc1": "sea", "ph2": "sea", "sg2": "sea", "th2": "sea", "tw2": "sea", "vn2": "sea",
+}
 
-REGIONS = list(REGIONAL_BASE.keys())
+REGIONS = list(PLATFORM_BASE.keys())
 
 
 def _headers() -> dict:
@@ -53,18 +59,26 @@ async def _get(url: str, params: dict | None = None) -> dict:
         resp = await client.get(url, headers=_headers(), params=params)
         if resp.status_code == 404:
             return {}
+        if resp.status_code == 403:
+            print(f"[RiotAPI] 403 Forbidden — check RIOT_API_KEY is valid: {url}", flush=True)
+            return {}
+        if resp.status_code == 401:
+            print(f"[RiotAPI] 401 Unauthorized — RIOT_API_KEY may be expired: {url}", flush=True)
+            return {}
         resp.raise_for_status()
         return resp.json()
 
 
 # ── Account lookup ───────────────────────────────────────────────────────────
 
-async def get_puuid(game_name: str, tag_line: str) -> dict | None:
+async def get_puuid(game_name: str, tag_line: str, region: str = "na1") -> dict | None:
     """
     Resolve a Riot ID (gameName#tagLine) to a PUUID.
+    Uses the correct regional shard for the account lookup.
     Returns {"puuid": "...", "gameName": "...", "tagLine": "..."} or None.
     """
-    url = f"{REGIONAL_BASE['na1']}/riot/account/v1/accounts/by-riot-id/{game_name}/{tag_line}"
+    shard = ACCOUNT_REGION.get(region, "americas")
+    url = f"https://{shard}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{game_name}/{tag_line}"
     data = await _get(url)
     if not data or "puuid" not in data:
         return None
@@ -79,16 +93,16 @@ async def get_puuid(game_name: str, tag_line: str) -> dict | None:
 
 async def get_match_ids(puuid: str, region: str = "na1", count: int = 20) -> list[str]:
     """Get recent ranked match IDs for a PUUID."""
-    base = REGIONAL_BASE.get(region, REGIONAL_BASE["na1"])
-    url = f"{base}/lol/match/v5/matches/by-puuid/{puuid}/ids"
+    shard = ACCOUNT_REGION.get(region, "americas")
+    url = f"https://{shard}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids"
     data = await _get(url, params={"count": count, "type": "ranked"})
     return data if isinstance(data, list) else []
 
 
 async def get_match_details(match_id: str, region: str = "na1") -> dict | None:
     """Get full match details by match ID."""
-    base = REGIONAL_BASE.get(region, REGIONAL_BASE["na1"])
-    url = f"{base}/lol/match/v5/matches/{match_id}"
+    shard = ACCOUNT_REGION.get(region, "americas")
+    url = f"https://{shard}.api.riotgames.com/lol/match/v5/matches/{match_id}"
     return await _get(url) or None
 
 
@@ -198,7 +212,7 @@ async def get_summoner_profile(game_name: str, tag_line: str, region: str = "na1
     if not RIOT_API_KEY:
         raise RuntimeError("RIOT_API_KEY not configured.")
 
-    account = await get_puuid(game_name, tag_line)
+    account = await get_puuid(game_name, tag_line, region)
     if not account:
         return None
 
