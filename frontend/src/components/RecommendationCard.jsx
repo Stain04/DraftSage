@@ -42,7 +42,7 @@ const CURVE_LABELS = { early: "Early game", mid: "Mid game", late: "Late game", 
 
 // ── RecommendationCard ────────────────────────────────────────────────────────
 
-export default function RecommendationCard({ rec, rank, isTopPick = false, banMode = false }) {
+export default function RecommendationCard({ rec, rank, isTopPick = false, banMode = false, myStats }) {
   const [expanded, setExpanded] = useState(false);
   const diff    = DIFFICULTY_CONFIG[rec.difficulty]    || DIFFICULTY_CONFIG.Medium;
   const dmg     = DAMAGE_TYPE_CONFIG[rec.damage_type]  || DAMAGE_TYPE_CONFIG.Mixed;
@@ -86,7 +86,21 @@ export default function RecommendationCard({ rec, rank, isTopPick = false, banMo
             onError={(e) => { e.target.src = `https://ddragon.leagueoflegends.com/cdn/14.10.1/img/champion/${rec.champion}.png`; }}
           />
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-lg text-white drop-shadow">{rec.champion}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-lg text-white drop-shadow">{rec.champion}</h3>
+              {myStats && (
+                <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border ${
+                  myStats.winRate >= 55
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                    : myStats.winRate >= 48
+                    ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/30"
+                    : "bg-red-500/15 text-red-300 border-red-500/30"
+                }`}>
+                  You: {myStats.winRate}% WR
+                  <span className="text-navy-400 font-normal">({myStats.games} games)</span>
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

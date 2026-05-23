@@ -13,6 +13,7 @@ import RecommendationCard, {
 } from "./RecommendationCard";
 import { getSuggestions, describeApiError } from "../api/geminiApi";
 import { fetchAllChampions } from "../api/riotApi";
+import { fetchMyProfile } from "../api/summonerApi";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../context/AuthContext";
 
@@ -58,6 +59,9 @@ export default function DraftBoard() {
   const [result, setResult]     = useState(null);
   const [usage, setUsage]       = useState(getDailyUsage());
 
+  // Personal WR data from linked Riot account
+  const [championPerformance, setChampionPerformance] = useState({});
+
   // Champion pool (Pro)
   const [championPool, setChampionPool] = useState(() => {
     try { return JSON.parse(localStorage.getItem(POOL_KEY) || "[]"); } catch { return []; }
@@ -89,6 +93,20 @@ export default function DraftBoard() {
       .catch(() => toast.error("Could not load champions."))
       .finally(() => setChampLoading(false));
   }, []);
+
+  // Fetch personal WR data if user has linked Riot account
+  useEffect(() => {
+    if (!user?.user_metadata?.riot_puuid) return;
+    fetchMyProfile()
+      .then((profile) => {
+        const perf = {};
+        for (const p of profile.championPerformance || []) {
+          perf[p.champion.toLowerCase()] = p;
+        }
+        setChampionPerformance(perf);
+      })
+      .catch(() => {}); // silent — not critical
+  }, [user]);
 
   useEffect(() => {
     localStorage.setItem(POOL_KEY, JSON.stringify(championPool));
@@ -548,6 +566,7 @@ export default function DraftBoard() {
                     rank={i}
                     isTopPick={i === 0}
                     banMode={banMode}
+                    myStats={championPerformance[rec.champion?.toLowerCase()]}
                   />
                 ))}
               </div>
