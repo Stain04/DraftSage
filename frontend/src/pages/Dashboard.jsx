@@ -123,6 +123,12 @@ function RiotAccountSection({ user }) {
   const [region, setRegion] = useState("na1");
   const [regions, setRegions] = useState([]);
   const [linking, setLinking] = useState(false);
+  const [linked, setLinked] = useState(isLinked);
+  const [linkedMeta, setLinkedMeta] = useState(isLinked ? {
+    gameName: meta.riot_game_name,
+    tagLine: meta.riot_tag_line,
+    region: meta.riot_region,
+  } : null);
   const [profile, setProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
 
@@ -133,25 +139,31 @@ function RiotAccountSection({ user }) {
 
   // Auto-fetch profile if linked
   useEffect(() => {
-    if (isLinked) {
+    if (linked && !profile) {
       setLoadingProfile(true);
       fetchMyProfile()
         .then(setProfile)
-        .catch(() => {})
+        .catch((err) => {
+          console.error("[DraftSage] Failed to fetch profile:", err);
+        })
         .finally(() => setLoadingProfile(false));
     }
-  }, [isLinked]);
+  }, [linked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLink = async (e) => {
     e.preventDefault();
     if (!gameName.trim() || !tagLine.trim()) return toast.error("Enter your Riot ID (name#tag).");
     setLinking(true);
     try {
-      await linkRiotAccount(gameName.trim(), tagLine.trim(), region);
-      toast.success("Riot account linked!");
-      window.location.reload(); // refresh to get updated user_metadata
+      const result = await linkRiotAccount(gameName.trim(), tagLine.trim(), region);
+      toast.success(`Linked as ${result.gameName}#${result.tagLine}`);
+      setLinked(true);
+      setLinkedMeta({ gameName: result.gameName, tagLine: result.tagLine, region: result.region });
+      // Refresh Supabase session so user_metadata is up to date
+      await supabase.auth.refreshSession();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to link account.");
+      const msg = err.response?.data?.detail || err.message || "Failed to link account.";
+      toast.error(msg);
     } finally {
       setLinking(false);
     }
@@ -161,8 +173,10 @@ function RiotAccountSection({ user }) {
     try {
       await unlinkRiotAccount();
       toast.success("Riot account unlinked.");
+      setLinked(false);
+      setLinkedMeta(null);
       setProfile(null);
-      window.location.reload();
+      await supabase.auth.refreshSession();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to unlink.");
     }
@@ -179,13 +193,13 @@ function RiotAccountSection({ user }) {
         <h2 className="font-semibold text-white text-sm">Riot Account</h2>
       </div>
 
-      {isLinked ? (
+      {linked ? (
         <div className="space-y-4">
           {/* Linked account info */}
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-white font-semibold">{meta.riot_game_name}#{meta.riot_tag_line}</p>
-              <p className="text-xs text-navy-500">{meta.riot_region?.toUpperCase()}</p>
+              <p className="text-sm text-white font-semibold">{linkedMeta?.gameName}#{linkedMeta?.tagLine}</p>
+              <p className="text-xs text-navy-500">{linkedMeta?.region?.toUpperCase()}</p>
             </div>
             <button
               onClick={handleUnlink}
