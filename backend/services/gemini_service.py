@@ -26,6 +26,7 @@ from .champion_types           import analyze_team_damage, classify_champion
 from .composition_analyzer     import analyze_comp, build_intelligence_block
 from .avoidance_engine         import derive_avoidance, build_avoidance_block, build_avoid_set
 from .summoner_spells          import get_summoner_spells
+from .riot_service             import get_champion_difficulty
 
 # ── Primary LLM: Groq ────────────────────────────────────────────────────────
 GROQ_API_KEYS: list[str] = []
@@ -879,6 +880,11 @@ Return ONLY valid JSON, no extra text.
             det_type = classify_champion(rec.get("champion", ""))
             if det_type != "Mixed":
                 rec["damage_type"] = det_type
+            # LLMs hallucinate difficulty (Garen as "Hard", Azir as "Easy").
+            # Override with Riot's official difficulty from Data Dragon.
+            det_diff = await get_champion_difficulty(rec.get("champion", ""))
+            if det_diff:
+                rec["difficulty"] = det_diff
 
     # ── Patch tier badges (existing OP.GG integration) ────────────────────────
     if tier_list_ref and result.get("recommendations"):

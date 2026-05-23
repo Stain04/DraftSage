@@ -57,6 +57,7 @@ async def get_all_champions() -> list[dict]:
                 "icon": f"{DDRAGON_BASE}/cdn/{patch}/img/champion/{champ_id}.png",
                 "tags": champ_data.get("tags", []),
                 "blurb": champ_data.get("blurb", ""),
+                "info": champ_data.get("info", {}),
             }
         )
 
@@ -74,6 +75,24 @@ async def get_champion_by_name(name: str) -> dict | None:
         if champ["name"].lower() == name_lower or champ["id"].lower() == name_lower:
             return champ
     return None
+
+
+async def get_champion_difficulty(name: str) -> str | None:
+    """
+    Look up champion difficulty from Riot Data Dragon's info.difficulty (1-10).
+    Returns 'Easy' (1-3), 'Medium' (4-6), or 'Hard' (7-10).
+    Returns None if champion not found.
+    """
+    champ = await get_champion_by_name(name)
+    if not champ:
+        return None
+    diff = champ.get("info", {}).get("difficulty", 0)
+    if diff <= 3:
+        return "Easy"
+    elif diff <= 6:
+        return "Medium"
+    else:
+        return "Hard"
 
 
 def get_champion_icon_url(champion_name: str, patch: str = "14.10.1") -> str:
