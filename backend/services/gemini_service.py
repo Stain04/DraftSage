@@ -38,7 +38,7 @@ for i in range(1, 11):
 
 # Qwen3-32B — active reasoning model on Groq.
 GROQ_MODEL     = "qwen/qwen3-32b"
-GROQ_FALLBACKS = ["llama-3.3-70b-versatile", "llama3-70b-8192"]
+GROQ_FALLBACKS = []
 
 # ── Global round-robin key counter ────────────────────────────────────────
 # Each request gets the NEXT key in sequence (wraps around).
