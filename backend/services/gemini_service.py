@@ -73,7 +73,7 @@ REASONING ORDER (think through silently, then output ONLY JSON):
 
   Step 1 — Read the ally gaps. What does the next pick MUST bring?
   Step 2 — Read the enemy threats. What does the next pick MUST counter?
-  Step 3 — Build your candidate pool (ALL THREE are valid sources):
+  Step 3 — Build your candidate pool (ALL THREE are equal sources):
             SOURCE A: LOLALYTICS COUNTER POOL — champions verified to WIN lane
                        on current patch data. These score high on lane (0-40).
                        Prioritise these IF they also address a gap or threat.
@@ -86,14 +86,22 @@ REASONING ORDER (think through silently, then output ONLY JSON):
             SOURCE C: ROLE-VIABLE POOL (ROLE LOCK list) — any champion on that
                        list is a valid suggestion if it fits the situation better
                        than the other sources. Do NOT ignore this pool. Explore
-                       the full list — niche picks, off-meta options, and
+                       the FULL list — niche picks, off-meta options, and
                        champions not commonly seen are valid when they fit.
+            ALL THREE SOURCES ARE EQUAL. Do NOT default to only counter-pool
+            champions. A role-viable champion that fills a gap is often a
+            BETTER pick than a counter-pool champion that adds nothing to
+            the comp. Explore the full role pool before deciding.
             FILTER OUT from all sources: forbidden damage type, avoidance list,
             lane blacklist, already drafted champions.
   Step 4 — From the filtered candidates, pick 3 with DIFFERENT archetypes and
             different fills_gap values. NEVER suggest the same champion twice.
             Make each recommendation feel like a genuinely different option:
             one lane-dominant, one gap-filling, one meta/utility pick.
+            VARIETY IS MANDATORY. If you find yourself picking the same champions
+            you suggested in previous responses, STOP and explore the role pool
+            deeper. Every draft is unique — your picks should reflect the specific
+            draft state, not a default comfort list.
   Step 5 — For each pick, compute score_breakdown:
             lane (40)         — counter pool presence + lane matchup strength
             team_fit (25)     — how well it fills the ally gaps
@@ -770,7 +778,7 @@ Return ONLY valid JSON, no extra text.
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user",   "content": user_message},
                     ],
-                    temperature = 0.3,
+                    temperature = 0.5,
                     max_tokens  = 3000,
                 )
                 raw_text = response.choices[0].message.content
