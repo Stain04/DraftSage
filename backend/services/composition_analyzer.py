@@ -383,13 +383,43 @@ AXES = [
     "sustain", "disengage", "pick", "splitpush", "dive", "scaling",
 ]
 
-# Threshold rules — how much of an axis a 5-man team should have
+# Threshold rules — how much of an axis a 5-man team should have.
+# Universal rules always apply. Context rules only fire when the enemy comp
+# makes that axis critical (condition takes enemy_profile and returns bool).
 GAP_RULES = [
-    ("engage",     2, "Engage / hard initiation"),
-    ("hard_cc",    4, "Hard CC"),
-    ("frontline",  3, "Frontline / tankiness"),
-    ("waveclear",  2, "Waveclear"),
-    ("peel",       2, "Peel for the backline"),
+    # ── Universal — every comp needs some of these ───────────────────────
+    {"axis": "engage",    "target": 2, "label": "Engage / hard initiation"},
+    {"axis": "hard_cc",   "target": 4, "label": "Hard CC"},
+    {"axis": "frontline", "target": 3, "label": "Frontline / tankiness"},
+    {"axis": "waveclear", "target": 2, "label": "Waveclear"},
+    {"axis": "dive",      "target": 2, "label": "Dive / backline access"},
+    {"axis": "pick",      "target": 2, "label": "Pick potential"},
+    # ── Conditional — only matter in certain drafts ──────────────────────
+    {
+        "axis": "peel", "target": 2, "label": "Peel for the backline",
+        "condition": lambda ep, ap, picks: any(
+            get_traits(p).get("scaling", 0) >= 2 and get_traits(p).get("ranged", 0) >= 2
+            for p in picks
+        ),
+    },
+    {
+        "axis": "disengage", "target": 2, "label": "Disengage",
+        "condition": lambda ep, ap, picks: ep.get("engage", 0) >= 3 or ep.get("dive", 0) >= 3,
+        "reason": "enemy has strong engage/dive — you need tools to break fights",
+    },
+    {
+        "axis": "poke", "target": 2, "label": "Poke / siege",
+        "condition": lambda ep, ap, picks: (
+            (ep.get("engage", 0) >= 3 and ap.get("poke", 0) <= 1)
+            or ep.get("disengage", 0) >= 2
+        ),
+        "reason": "enemy has engage but no poke, or strong disengage — poke creates pressure they can't answer",
+    },
+    {
+        "axis": "sustain", "target": 2, "label": "Sustain",
+        "condition": lambda ep, ap, picks: ep.get("poke", 0) >= 3,
+        "reason": "enemy has heavy poke — sustain keeps your team healthy through sieges",
+    },
 ]
 
 
@@ -424,48 +454,65 @@ def team_profile(picks: list[str]) -> dict[str, int]:
     return profile
 
 
-def identify_gaps(ally_profile: dict, ally_picks: list[str]) -> list[dict]:
+def identify_gaps(
+    ally_profile: dict,
+    ally_picks: list[str],
+    enemy_profile: dict | None = None,
+) -> list[dict]:
     """
-    Return ordered list of gap dicts: [{name, severity, why}].
+    Return ordered list of gap dicts: [{name, severity, why, ...}].
     Severity: 'critical' = total miss, 'soft' = below threshold.
 
-    Special peel rule: only flag peel if the team has a hypercarry/squishy
-    that NEEDS peel.
+    Supports context-aware rules: rules with a "condition" key only fire
+    when the enemy comp makes that axis relevant. Rules without a condition
+    are universal and always checked.
     """
     gaps: list[dict] = []
     n = len(ally_picks)
+    ep = enemy_profile or {}
 
     # Scale threshold by team size — 5-man rules above are full-team targets
     scale = max(1, n) / 5.0
 
-    has_hypercarry = any(
-        get_traits(p).get("scaling", 0) >= 2 and get_traits(p).get("ranged", 0) >= 2
-        for p in ally_picks
-    )
+    for rule in GAP_RULES:
+        axis   = rule["axis"]
+        target = rule["target"]
+        label  = rule["label"]
 
-    for axis, target, label in GAP_RULES:
-        if axis == "peel" and not has_hypercarry:
+        # Context gate — skip if the condition doesn't match the enemy comp
+        condition = rule.get("condition")
+        if condition and not condition(ep, ally_profile, ally_picks):
             continue
+
         scaled_target = target * scale
         score = ally_profile.get(axis, 0)
+
         if score == 0:
-            gaps.append({
+            gap: dict = {
                 "name": label,
                 "axis": axis,
                 "severity": "critical",
                 "score": score,
                 "target": target,
                 "why": f"Your team has zero {label.lower()} — enemy can exploit this freely.",
-            })
+            }
+            # Attach context reason so intelligence block can explain WHY this
+            # axis matters in this specific draft
+            if rule.get("reason"):
+                gap["context_reason"] = rule["reason"]
+            gaps.append(gap)
         elif score < scaled_target:
-            gaps.append({
+            gap = {
                 "name": label,
                 "axis": axis,
                 "severity": "soft",
                 "score": score,
                 "target": target,
                 "why": f"Your team is light on {label.lower()} ({score} vs target {target}).",
-            })
+            }
+            if rule.get("reason"):
+                gap["context_reason"] = rule["reason"]
+            gaps.append(gap)
 
     # Order: critical first, then soft
     gaps.sort(key=lambda g: (0 if g["severity"] == "critical" else 1, g["axis"]))
@@ -587,7 +634,7 @@ def analyze_comp(ally_picks: list[str], enemy_picks: list[str], role: str) -> di
     ally_p  = team_profile(ally_picks)
     enemy_p = team_profile(enemy_picks)
 
-    gaps    = identify_gaps(ally_p, ally_picks)
+    gaps    = identify_gaps(ally_p, ally_picks, enemy_p)
     threats = detect_enemy_threats(enemy_p, enemy_picks)
 
     ally_arche  = detect_archetype(ally_p,  ally_picks)
@@ -634,6 +681,8 @@ def build_intelligence_block(analysis: dict, dmg: dict, role: str) -> str:
         for g in analysis["ally_gaps"]:
             tag = "❌ CRITICAL" if g["severity"] == "critical" else "⚠ Soft"
             lines.append(f"  {tag} — {g['name']}: {g['why']}")
+            if g.get("context_reason"):
+                lines.append(f"    ↳ Context: {g['context_reason']}")
         lines.append(
             "  → The next pick MUST address the top critical gap if possible. "
             "If it cannot, justify why explicitly."
