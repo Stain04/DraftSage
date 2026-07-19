@@ -1,7 +1,7 @@
 import axios from "axios";
 
 // Strip any non-printable chars (BOM, CR, LF, etc.) that corrupt Axios URL validation
-const BASE_URL = (process.env.REACT_APP_API_URL || "https://draftsage-production.up.railway.app")
+const BASE_URL = (process.env.REACT_APP_API_URL || "https://draftsage-production-721d.up.railway.app")
   .replace(/[^\x20-\x7E]/g, "")
   .trim();
 
@@ -136,7 +136,7 @@ export function describeApiError(err, fallback = "Something went wrong. Please t
     return "The Engine took too long to respond. Try again — sometimes the patch-data source is slow.";
   }
   if (err?.code === "ERR_NETWORK" || !err?.response) {
-    return "Couldn't reach the Engine. If you use an ad-blocker, allow draftsage-production.up.railway.app and reload.";
+    return "Couldn't reach the Engine. If you use an ad-blocker, allow draftsage-production-721d.up.railway.app and reload.";
   }
   const s = err?.response?.status;
   if (s === 401) {

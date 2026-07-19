@@ -5,7 +5,7 @@
 
 import axios from "axios";
 
-const BASE_URL = (process.env.REACT_APP_API_URL || "https://draftsage-production.up.railway.app")
+const BASE_URL = (process.env.REACT_APP_API_URL || "https://draftsage-production-721d.up.railway.app")
   .replace(/[^\x20-\x7E]/g, "")
   .trim();
 

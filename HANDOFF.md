@@ -89,7 +89,7 @@ Role pool capped at 30 champions, gap-filling pool capped at 15 per gap. Both sh
 |---|---|
 | **Frontend (primary)** | https://www.draftsage.pro (custom domain) |
 | **Frontend (Vercel default)** | https://draft-sage-five.vercel.app |
-| **Backend (Railway)** | https://draftsage-production.up.railway.app |
+| **Backend (Railway)** | https://draftsage-production-721d.up.railway.app |
 | **GitHub** | https://github.com/Stain04/DraftSage |
 | **Vercel project** | `draft-sage` (team: `stain04s-projects`) |
 | **Railway project** | `draftsage-production` |
@@ -245,7 +245,7 @@ PRO_DAILY_CAP=200                              # successful Engine runs per UTC 
 
 ### Frontend `.env.production`
 ```env
-REACT_APP_API_URL=https://draftsage-production.up.railway.app
+REACT_APP_API_URL=https://draftsage-production-721d.up.railway.app
 REACT_APP_SUPABASE_URL=https://your-project.supabase.co
 REACT_APP_SUPABASE_KEY=your-anon-key
 ```
@@ -259,7 +259,7 @@ REACT_APP_SUPABASE_KEY=...
 
 ### Frontend `.env.production`
 ```env
-REACT_APP_API_URL=https://draftsage-production.up.railway.app
+REACT_APP_API_URL=https://draftsage-production-721d.up.railway.app
 REACT_APP_SUPABASE_URL=https://oeghultxrvdouvtlzmih.supabase.co
 REACT_APP_SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lZ2h1bHR4cnZkb3V2dGx6bWloIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3OTQ2NDcsImV4cCI6MjA5NDM3MDY0N30.wP8_tDhNWw422KZzYnT2-TWBgXJPpjKuiRNDQEs31og
 ```

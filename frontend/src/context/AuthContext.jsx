@@ -29,7 +29,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Backend API URL — needed by claim-session call here (we can't import from
 // api/geminiApi.js without creating a circular dep, so define locally).
-const API_URL = clean(process.env.REACT_APP_API_URL || "https://draftsage-production.up.railway.app");
+const API_URL = clean(process.env.REACT_APP_API_URL || "https://draftsage-production-721d.up.railway.app");
 
 const SESSION_ID_KEY = "draftsage_session_id";
 
